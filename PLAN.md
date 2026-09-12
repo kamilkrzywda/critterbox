@@ -25,7 +25,7 @@ Theme: Polish fauna (mouse, hare, hamster, deer, frog, stork, owl, fox, crow, ca
 | Inspector | Click any entity (plant/animal) → panel with all its live parameters; selected entity highlighted |
 | Saves | In-browser autosave (IndexedDB) + "New World" button to regenerate |
 | Perf | No hard limits for now; sim speed slider (0–8×) always available |
-| Location/deploy | `~/projects/sandbox/critterbox` → `critters.dev.kkhost.pl` |
+| Location/deploy | `~/projects/sandbox/critterbox` → `critters.dev.kkhost.pl`; GitHub Pages (`kamilkrzywda.github.io/critterbox`) is a test mirror auto-deployed on push to master via `.github/workflows/deploy.yml` — critters.dev.kkhost.pl remains the local deployment |
 | VCS | git, branch master, remote origin = github.com:kamilkrzywda/critterbox; nice commit packages per feature/phase; version in package.json (0.x.y); CHANGELOG.md history file; push after every verified milestone |
 
 ## Tech stack & conventions
@@ -46,6 +46,7 @@ src/
   sim/               — PURE TS: agents, energy model, behavior tables, spatial hash grid, rng.ts
     agents/          — base agent schema + species modules self-registering behaviors (plants/, animals/)
   render/            — Three.js: terrain mesh, InstancedMesh per species, incremental updates
+  ui/                — HUD overlays: world-gen dialog (panel.ts), per-species population panel (population.ts)
   save/              — fflate gzip in module worker → IndexedDB
 scripts/sim-check.mjs + scripts/checks/*.mjs   — headless deterministic suite
 e2e/                 — Playwright specs (global install)
