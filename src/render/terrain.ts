@@ -20,8 +20,19 @@ const PALETTE: Record<number, [number, number, number]> = {
 const UNDERWATER_TINT: [number, number, number] = [0.42, 0.44, 0.38];
 const UNDERWATER_MIX = 0.5;
 
-/** Build the terrain mesh + water plane for a world as one group (dispose via disposeTerrain). */
-export function buildTerrain(world: World): THREE.Group {
+/** Pure heightmap → mesh data (positions/colours/triangle indices). No three.js — headlessly testable. */
+export interface TerrainGeometryData {
+  /** w*d vertices, xyz in centered meters (y = cell height). */
+  positions: Float32Array;
+  /** w*d vertex colours, rgb (biome palette; underwater floors desaturated). */
+  colors: Float32Array;
+  /** Triangle list — exactly 6 indices per cell quad, (w-1)*(d-1) quads. */
+  indices: Uint32Array;
+}
+
+/** Build positions/colours/triangle indices for a world's heightmap grid. One vertex per cell; each of the
+ *  (w-1)*(d-1) cell quads is split along one diagonal into exactly two up-facing triangles covering it fully. */
+export function buildTerrainGeometryData(world: World): TerrainGeometryData {
   const w = world.width, d = world.depth;
   const n = w * d;
   const positions = new Float32Array(n * 3);
@@ -51,11 +62,18 @@ export function buildTerrain(world: World): THREE.Group {
   let k = 0;
   for (let z = 0; z < d - 1; z++) {
     for (let x = 0; x < w - 1; x++) {
-      const a = z * w + x, b = a + 1, c = a + w, dd = c + 1; // quad corners (x right, z down-grid)
+      const a = z * w + x, b = a + 1, c = a + w, dd = c + 1; // quad corners: a TL, b TR, c BL, dd BR
       indices[k++] = a; indices[k++] = c; indices[k++] = b; // CCW from above → up-facing normal
-      indices[k++] = a; indices[k++] = c; indices[k++] = dd;
+      indices[k++] = c; indices[k++] = dd; indices[k++] = b; // other half of the same quad (diagonal c–b), same winding
     }
   }
+
+  return { positions, colors, indices };
+}
+
+/** Build the terrain mesh + water plane for a world as one group (dispose via disposeTerrain). */
+export function buildTerrain(world: World): THREE.Group {
+  const { positions, colors, indices } = buildTerrainGeometryData(world);
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));

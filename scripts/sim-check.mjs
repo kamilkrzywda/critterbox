@@ -1,7 +1,7 @@
 /**
- * Headless deterministic check suite for the pure simulation (no browser, no three.js).
+ * Headless deterministic check suite for the pure simulation (no browser; three.js loads fine under Node).
  *
- * The pure TS sources listed in SOURCES are compiled to CJS with the project's tsc into a temp dir
+ * The TS sources listed in SOURCES are compiled to CJS with the project's tsc into a temp dir
  * (Sandfall pattern) and handed to every section via ctx. Each file in ./checks/*.mjs default-exports
  * an object of named section functions; a section receives the shared ctx and records results via
  * ctx.check(name, ok). Non-zero exit on any failure — this is the per-feature gate's first step.
@@ -11,7 +11,7 @@
 
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -19,10 +19,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const checksDir = join(root, 'scripts', 'checks');
 
-// Pure-TS sources compiled for the headless sections (extend as sim/ grows — keep three.js/DOM out).
+// Sources compiled for the headless sections (extend as the codebase grows). src/render/terrain.ts is
+// included because its pure geometry builder must be tested; it imports three, which loads fine under Node.
 const SOURCES = [
   'src/worldgen/noise.ts',
   'src/worldgen/worldgen.ts',
+  'src/render/terrain.ts',
   'src/sim/rng.ts',
   'src/sim/types.ts',
   'src/sim/registry.ts',
@@ -58,8 +60,9 @@ function makeCtx(extra) {
   };
 }
 
-// --- compile the pure sources to CJS in a temp dir ---------------------------------
+// --- compile the sources to CJS in a temp dir -------------------------------------
 const tmp = mkdtempSync(join(tmpdir(), 'sim-check-'));
+symlinkSync(join(root, 'node_modules'), join(tmp, 'node_modules')); // let compiled modules resolve deps (e.g. three) under Node
 let compiled = false;
 try {
   try {
@@ -85,6 +88,7 @@ try {
     const tmpRequire = createRequire(join(tmp, 'noop.cjs'));
     const worldgenMod = tmpRequire('./worldgen/worldgen.js');
     const noiseMod = tmpRequire('./worldgen/noise.js');
+    const terrainMod = tmpRequire('./render/terrain.js');
 
     // Require the species barrel first so every plant self-registers before any sim use (CJS caches it).
     tmpRequire('./sim/agents/index.js');
@@ -101,6 +105,7 @@ try {
     const ctxExtra = {
       worldgen: worldgenMod,
       noise: noiseMod,
+      terrain: terrainMod, // pure geometry builder (buildTerrainGeometryData) + three.js mesh wrapper
       sim: {
         rng: rngMod,
         types: typesMod,

@@ -2,6 +2,11 @@
 
 All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 
+## [Unreleased]
+
+### Fixed
+- Terrain mesh — restored missing triangle per heightmap cell (the second quad triangle was split along the wrong diagonal, leaving a triangular hole in every land cell); added headless geometry regression check (`scripts/checks/terrain.mjs`)
+
 ## [0.4.0] - 2026-09-12
 
 ### Added
