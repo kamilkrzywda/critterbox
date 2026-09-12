@@ -1,5 +1,5 @@
 /**
- * mysz — mouse (PLAN roster, Phase 4). The tiny fast breeder: grazes grass + clover and eats INSECTS as
+ * Mouse (PLAN roster, Phase 4). The tiny fast breeder: grazes grass + clover and eats INSECTS as
  * prey (Phase 4 Part B — an insect's energy is digested on the spot via Sim.killAgent), matures quickly,
  * breeds often and dies young — the base of the food chain that fox/owl/stork/crow will eat in Phase 5.
  * Self-registers into the species registry at load (plants pattern); behaviour comes from the shared
@@ -16,10 +16,10 @@
 import { registerSpecies } from '../../registry';
 import type { AnimalSpecies } from './base';
 
-export const MYSZ: AnimalSpecies = {
-  id: 'mysz',
+export const MOUSE: AnimalSpecies = {
+  id: 'mouse',
   kind: 'animal',
-  displayName: 'mysz (mouse)',
+  displayName: 'Mouse',
   traits: {
     speed: { min: 0.8, max: 1.4, sigma: 0.12 },
     size: { min: 0.7, max: 1.3, sigma: 0.15 },
@@ -42,8 +42,8 @@ export const MYSZ: AnimalSpecies = {
   wanderRadius: 18,
   popCap: 400,
   foodSpecies: ['grass', 'clover'],
-  preySpecies: ['owady'], // insects — extra digestion energy; the prey is killed when fed upon
+  preySpecies: ['insect'], // insects — extra digestion energy; the prey is killed when fed upon
   bodySize: [0.16, 0.12, 0.2], // world-space meters at mid size trait → rendered 0.09–0.15 m high, 0.15–0.25 m long (a real mouse)
 };
 
-registerSpecies(MYSZ);
+registerSpecies(MOUSE);

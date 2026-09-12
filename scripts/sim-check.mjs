@@ -37,17 +37,17 @@ const SOURCES = [
   'src/sim/agents/plants/tree.ts',
   'src/sim/agents/animals/base.ts',
   'src/sim/corpses.ts',
-  'src/sim/agents/animals/mysz.ts',
-  'src/sim/agents/animals/zajac.ts',
-  'src/sim/agents/animals/chomik.ts',
-  'src/sim/agents/animals/sarna.ts',
-  'src/sim/agents/animals/owady.ts',
+  'src/sim/agents/animals/mouse.ts',
+  'src/sim/agents/animals/hare.ts',
+  'src/sim/agents/animals/hamster.ts',
+  'src/sim/agents/animals/deer.ts',
+  'src/sim/agents/animals/insect.ts',
   // Phase 5: frogs + the predator/scavenger layer
-  'src/sim/agents/animals/zaba.ts',
-  'src/sim/agents/animals/lis.ts',
-  'src/sim/agents/animals/bocian.ts',
-  'src/sim/agents/animals/sowa.ts',
-  'src/sim/agents/animals/wrona.ts',
+  'src/sim/agents/animals/frog.ts',
+  'src/sim/agents/animals/fox.ts',
+  'src/sim/agents/animals/stork.ts',
+  'src/sim/agents/animals/owl.ts',
+  'src/sim/agents/animals/crow.ts',
   'src/sim/agents/index.ts',
   'src/sim/sim.ts',
   'src/sim/seedLife.ts',
@@ -112,17 +112,17 @@ try {
     const simCoreMod = tmpRequire('./sim/sim.js');
     const seedLifeMod = tmpRequire('./sim/seedLife.js');
     const animalsBaseMod = tmpRequire('./sim/agents/animals/base.js');
-    const myszMod = tmpRequire('./sim/agents/animals/mysz.js');
-    const zajacMod = tmpRequire('./sim/agents/animals/zajac.js');
-    const chomikMod = tmpRequire('./sim/agents/animals/chomik.js');
-    const sarnaMod = tmpRequire('./sim/agents/animals/sarna.js');
-    const owadyMod = tmpRequire('./sim/agents/animals/owady.js');
+    const mouseMod = tmpRequire('./sim/agents/animals/mouse.js');
+    const hareMod = tmpRequire('./sim/agents/animals/hare.js');
+    const hamsterMod = tmpRequire('./sim/agents/animals/hamster.js');
+    const deerMod = tmpRequire('./sim/agents/animals/deer.js');
+    const insectMod = tmpRequire('./sim/agents/animals/insect.js');
     // Phase 5: frogs + the predator/scavenger layer (corpses module carries the scavenging API)
-    const zabaMod = tmpRequire('./sim/agents/animals/zaba.js');
-    const lisMod = tmpRequire('./sim/agents/animals/lis.js');
-    const bocianMod = tmpRequire('./sim/agents/animals/bocian.js');
-    const sowaMod = tmpRequire('./sim/agents/animals/sowa.js');
-    const wronaMod = tmpRequire('./sim/agents/animals/wrona.js');
+    const frogMod = tmpRequire('./sim/agents/animals/frog.js');
+    const foxMod = tmpRequire('./sim/agents/animals/fox.js');
+    const storkMod = tmpRequire('./sim/agents/animals/stork.js');
+    const owlMod = tmpRequire('./sim/agents/animals/owl.js');
+    const crowMod = tmpRequire('./sim/agents/animals/crow.js');
     const corpsesMod = tmpRequire('./sim/corpses.js');
 
     const ctxExtra = {
@@ -141,16 +141,16 @@ try {
         seedLife: seedLifeMod.seedLife,
         animals: animalsBaseMod, // shared animal framework (updateAnimal/tryBreed/hooks + visualScale size mapping)
         tree: treeMod, // tree species table + world-space size constants (size-mapping checks)
-        mysz: myszMod.MYSZ, // the mouse species table (trait bounds for assertions)
-        zajac: zajacMod.ZAJAC,
-        chomik: chomikMod.CHOMIK,
-        sarna: sarnaMod.SARNA,
-        owady: owadyMod.OWADY,
-        zaba: zabaMod.ZABA, // Phase 5 species tables (trait bounds for assertions)
-        lis: lisMod.LIS,
-        bocian: bocianMod.BOCIAN,
-        sowa: sowaMod.SOWA,
-        wrona: wronaMod.WRONA,
+        mouse: mouseMod.MOUSE, // the mouse species table (trait bounds for assertions)
+        hare: hareMod.HARE,
+        hamster: hamsterMod.HAMSTER,
+        deer: deerMod.DEER,
+        insect: insectMod.INSECT,
+        frog: frogMod.FROG, // Phase 5 species tables (trait bounds for assertions)
+        fox: foxMod.FOX,
+        stork: storkMod.STORK,
+        owl: owlMod.OWL,
+        crow: crowMod.CROW,
         corpses: corpsesMod, // corpse layer: spawnCorpse/findNearestCorpse/scavengeCorpse + decay constant
       },
     };

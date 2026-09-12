@@ -1,5 +1,5 @@
 /**
- * chomik — hamster (PLAN roster, Phase 4 Part B). The stocky seed-eater of grassland and forest edge:
+ * Hamster (PLAN roster, Phase 4 Part B). The stocky seed-eater of grassland and forest edge:
  * eats grass + clover + cranberry berries; slower than the mouse but a decent breeder. Self-registers into
  * the species registry at load (plants pattern); behaviour comes from the shared framework in ./base.ts,
  * parameterized by this table + per-agent traits.
@@ -15,10 +15,10 @@
 import { registerSpecies } from '../../registry';
 import type { AnimalSpecies } from './base';
 
-export const CHOMIK: AnimalSpecies = {
-  id: 'chomik',
+export const HAMSTER: AnimalSpecies = {
+  id: 'hamster',
   kind: 'animal',
-  displayName: 'chomik (hamster)',
+  displayName: 'Hamster',
   traits: {
     speed: { min: 0.7, max: 1.2, sigma: 0.1 },
     size: { min: 1.0, max: 1.6, sigma: 0.15 },
@@ -44,4 +44,4 @@ export const CHOMIK: AnimalSpecies = {
   bodySize: [0.2, 0.16, 0.24], // world-space meters at mid size trait → rendered 0.12–0.2 m high, 0.18–0.3 m long (a real hamster)
 };
 
-registerSpecies(CHOMIK);
+registerSpecies(HAMSTER);

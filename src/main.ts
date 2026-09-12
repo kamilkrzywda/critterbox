@@ -29,17 +29,17 @@ const PLANT_ROWS: PopRow[] = [
   { id: 'tree', name: 'drzewo' },
 ];
 const ANIMAL_ROWS: PopRow[] = [
-  { id: 'mysz', name: 'mysz' },
-  { id: 'zajac', name: 'zając' },
-  { id: 'chomik', name: 'chomik' },
-  { id: 'sarna', name: 'sarna' },
-  { id: 'owady', name: 'owady' },
+  { id: 'mouse', name: 'Mouse' },
+  { id: 'hare', name: 'Hare' },
+  { id: 'hamster', name: 'Hamster' },
+  { id: 'deer', name: 'Deer' },
+  { id: 'insect', name: 'Insect' },
   // Phase 5: frogs + the predator/scavenger layer
-  { id: 'zaba', name: 'żaba' },
-  { id: 'lis', name: 'lis' },
-  { id: 'bocian', name: 'bocian' },
-  { id: 'sowa', name: 'sowa' },
-  { id: 'wrona', name: 'wrona' },
+  { id: 'frog', name: 'Frog' },
+  { id: 'fox', name: 'Fox' },
+  { id: 'stork', name: 'Stork' },
+  { id: 'owl', name: 'Owl' },
+  { id: 'crow', name: 'Crow' },
 ];
 
 // --- renderer / scene -------------------------------------------------------------------

@@ -1,5 +1,5 @@
 /**
- * lis — fox (PLAN roster, Phase 5). The main predator AND scavenger: hunts hare/mouse/frog and feeds on
+ * Fox (PLAN roster, Phase 5). The main predator AND scavenger: hunts hare/mouse/frog and feeds on
  * corpses. HUNTER-GATED per the Sandfall snake lesson: it only enters hunt state below hungerThreshold
  * (60% of capacity) — full foxes wander/breed like herbivores, which prevents the classic predator-prey
  * overshoot/oscillation. SATURATING INTAKE (base.ts): each kill raises satiation, so quick successive
@@ -20,10 +20,10 @@ import { registerSpecies } from '../../registry';
 import type { AnimalSpecies } from './base';
 import { scavengerDecide } from '../../corpses';
 
-export const LIS: AnimalSpecies = {
-  id: 'lis',
+export const FOX: AnimalSpecies = {
+  id: 'fox',
   kind: 'animal',
-  displayName: 'lis (fox)',
+  displayName: 'Fox',
   traits: {
     speed: { min: 0.9, max: 1.4, sigma: 0.1 },
     size: { min: 1.8, max: 2.6, sigma: 0.2 },
@@ -47,9 +47,9 @@ export const LIS: AnimalSpecies = {
   roostAnchored: true, // unanchored random-walk diffusion carried foxes into "prey deserts" between mouse clusters
   popCap: 24,
   foodSpecies: [], // carnivore — prey + corpses only
-  preySpecies: ['mysz', 'zajac', 'zaba'],
+  preySpecies: ['mouse', 'hare', 'frog'],
   bodySize: [0.4, 0.5, 0.85], // world-space meters at mid size trait → rendered 0.38–0.63 m high, 0.64–1.06 m long incl. tail (a real fox)
   decide: scavengerDecide, // corpse first when hungry, then prey — see corpses.ts
 };
 
-registerSpecies(LIS);
+registerSpecies(FOX);

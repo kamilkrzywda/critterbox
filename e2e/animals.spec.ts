@@ -13,9 +13,9 @@ interface CritterboxSim {
   populations: Pops;
 }
 
-const ANIMALS = ['mysz', 'zajac', 'chomik', 'sarna', 'owady'];
+const ANIMALS = ['mouse', 'hare', 'hamster', 'deer', 'insect'];
 /** Phase 5: frogs + the predator/scavenger layer. */
-const PHASE5_ANIMALS = ['zaba', 'lis', 'bocian', 'sowa', 'wrona'];
+const PHASE5_ANIMALS = ['frog', 'fox', 'stork', 'owl', 'crow'];
 
 test('all five herbivore species present on load', async ({ page }) => {
   await page.goto('/');

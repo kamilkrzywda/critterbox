@@ -8,7 +8,7 @@ Critterbox is a browser-based 3D animal-ecosystem simulation: a procedurally gen
 
 Technically similar to Sandfall (`../3d`, docs in `../.docs/sandfall/`): same house stack (Vite + strict TS + Three.js), determinism patterns, headless test gate, deploy conventions — but without the CA grid; the world is a static heightmap and all dynamics live on agents.
 
-Theme: Polish fauna (mysz, zając, chomik, sarna, żaba, bocian, sowa, lis, wrona, karp, szczupak…).
+Theme: Polish fauna (mouse, hare, hamster, deer, frog, stork, owl, fox, crow, carp, pike…).
 
 ## Locked decisions
 
@@ -91,20 +91,20 @@ Plants: trawa (grass), koniczyna (clover), borówka (cranberry bush), trzcina (r
 
 | Animal | Role | Eats | Eaten by | Phase |
 |---|---|---|---|---|
-| mysz (mouse) | tiny fast breeder | seeds, grass | fox, owl, stork, crow | 4 |
-| zając (hare) | small herbivore | grass, clover | fox, owl | 4 |
-| chomik (hamster) | seed eater | seeds, grass | fox, owl | 4 |
-| sarna (roe deer) | large browser | shrubs, trees, reeds | — (wolf = stretch) | 4 |
-| owady (insects) | pollinator + prey | nectar/leaves | frog, stork, mouse | 4 |
-| żaba (frog) | marsh insectivore | insects | stork, pike, crow | 5 |
-| lis (fox) | main predator + scavenger | hare, mouse, frog, eggs, corpses | — | 5 |
-| bocian (stork) | marsh hunter | frogs, mice | — | 5 |
-| sowa (owl) | nocturnal hunter | mouse, hare | — | 5 |
-| wrona (crow) | scavenger/generalist | corpses, seeds, eggs | — | 5 |
-| karp (carp) | river omnivore | plants, insects | pike | 6 |
-| szczupak (pike) | river predator | carp, edge-frogs | — | 6 |
+| mouse | tiny fast breeder | seeds, grass | fox, owl, stork, crow | 4 |
+| hare | small herbivore | grass, clover | fox, owl | 4 |
+| hamster | seed eater | seeds, grass | fox, owl | 4 |
+| deer (roe) | large browser | shrubs, trees, reeds | — (wolf = stretch) | 4 |
+| insect | pollinator + prey | nectar/leaves | frog, stork, mouse | 4 |
+| frog | marsh insectivore | insects | stork, pike, crow | 5 |
+| fox | main predator + scavenger | hare, mouse, frog, eggs, corpses | — | 5 |
+| stork | marsh hunter | frogs, mice | — | 5 |
+| owl | nocturnal hunter | mouse, hare | — | 5 |
+| crow | scavenger/generalist | corpses, seeds, eggs | — | 5 |
+| carp | river omnivore | plants, insects | pike | 6 |
+| pike | river predator | carp, edge-frogs | — | 6 |
 
-Stretch: wilk (wolf, top predator), bobr (beaver, terrain modifier!), łoś (moose). Evolution v2: NEAT-style brains behind a pluggable "brain" interface.
+Stretch: wolf (top predator), beaver (terrain modifier!), moose. Evolution v2: NEAT-style brains behind a pluggable "brain" interface.
 
 ## Day/night & weather ("settings animator" pattern)
 

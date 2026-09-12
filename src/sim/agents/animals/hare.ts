@@ -1,5 +1,5 @@
 /**
- * zając — hare (PLAN roster, Phase 4 Part B). The small herbivore of open meadow/grassland: larger and
+ * Hare (PLAN roster, Phase 4 Part B). The small herbivore of open meadow/grassland: larger and
  * slower-breeding than the mouse but longer-lived; grazes grass + clover. Self-registers into the species
  * registry at load (plants pattern); behaviour comes from the shared framework in ./base.ts, parameterized
  * by this table + per-agent traits.
@@ -15,10 +15,10 @@
 import { registerSpecies } from '../../registry';
 import type { AnimalSpecies } from './base';
 
-export const ZAJAC: AnimalSpecies = {
-  id: 'zajac',
+export const HARE: AnimalSpecies = {
+  id: 'hare',
   kind: 'animal',
-  displayName: 'zając (hare)',
+  displayName: 'Hare',
   traits: {
     speed: { min: 0.8, max: 1.3, sigma: 0.1 },
     size: { min: 1.5, max: 2.5, sigma: 0.2 },
@@ -44,4 +44,4 @@ export const ZAJAC: AnimalSpecies = {
   bodySize: [0.4, 0.5, 0.75], // world-space meters at mid size trait → rendered 0.38–0.63 m high, 0.56–0.94 m long (a real hare)
 };
 
-registerSpecies(ZAJAC);
+registerSpecies(HARE);

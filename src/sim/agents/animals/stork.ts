@@ -1,5 +1,5 @@
 /**
- * bocian — stork (PLAN roster, Phase 5). The marsh hunter: hunts frog + mouse and moves through the
+ * Stork (PLAN roster, Phase 5). The marsh hunter: hunts frog + mouse and moves through the
  * marsh/shallow-water zone via the base.ts `validTarget` hook — a WIDER band than the frog's (6 m around
  * the water line vs. MARSH_BAND=3), so storks patrol banks and wet meadow edges too. Prey pursuit is
  * exempt, so it can still catch a mouse that strays upland. Perches on trees when idle is left as an
@@ -25,10 +25,10 @@ function inStorkZone(sim: Sim, x: number, z: number): boolean {
   return Math.abs(sim.world.heightAt(x, z) - sim.world.waterLevel) <= STORK_ZONE;
 }
 
-export const BOCIAN: AnimalSpecies = {
-  id: 'bocian',
+export const STORK: AnimalSpecies = {
+  id: 'stork',
   kind: 'animal',
-  displayName: 'bocian (stork)',
+  displayName: 'Stork',
   traits: {
     speed: { min: 0.8, max: 1.3, sigma: 0.1 },
     size: { min: 2.5, max: 3.5, sigma: 0.2 },
@@ -51,9 +51,9 @@ export const BOCIAN: AnimalSpecies = {
   wanderRadius: 14, // patrol the local marsh patch (Phase 5)
   popCap: 16,
   foodSpecies: [], // carnivore — prey only
-  preySpecies: ['zaba', 'mysz'],
+  preySpecies: ['frog', 'mouse'],
   bodySize: [0.3, 1.0, 0.5], // world-space meters at mid size trait → rendered 0.75–1.25 m tall on the legs (a real stork — the tallest bird)
   validTarget: inStorkZone, // marsh/shallow-water constraint (wander targets only — see module header)
 };
 
-registerSpecies(BOCIAN);
+registerSpecies(STORK);

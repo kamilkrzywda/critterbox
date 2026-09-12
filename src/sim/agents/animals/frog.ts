@@ -1,5 +1,5 @@
 /**
- * żaba — frog (PLAN roster, Phase 5). The marsh insectivore: eats INSECTS as prey and is constrained to
+ * Frog (PLAN roster, Phase 5). The marsh insectivore: eats INSECTS as prey and is constrained to
  * the marsh/water-edge zone via the base.ts `validTarget` hook — wander targets must sit within
  * MARSH_BAND of the water line (the marsh biome IS that band, so frogs live on wet ground and in shallow
  * water). Prey pursuit is exempt from the constraint, so a frog can still catch an insect that strays to
@@ -25,10 +25,10 @@ function inMarshZone(sim: Sim, x: number, z: number): boolean {
   return Math.abs(sim.world.heightAt(x, z) - sim.world.waterLevel) <= MARSH_BAND;
 }
 
-export const ZABA: AnimalSpecies = {
-  id: 'zaba',
+export const FROG: AnimalSpecies = {
+  id: 'frog',
   kind: 'animal',
-  displayName: 'żaba (frog)',
+  displayName: 'Frog',
   traits: {
     speed: { min: 0.7, max: 1.3, sigma: 0.1 },
     size: { min: 0.8, max: 1.4, sigma: 0.12 },
@@ -51,9 +51,9 @@ export const ZABA: AnimalSpecies = {
   wanderRadius: 14, // stay inside the local marsh patch
   popCap: 90, // the marsh food base (insects + cranberries) can't support more without mass starvation (Phase 5)
   foodSpecies: ['cranberry'], // marsh generalist fallback: browse the berry bushes when local insects run thin
-  preySpecies: ['owady'], // primary diet — marsh insects
+  preySpecies: ['insect'], // primary diet — marsh insects
   bodySize: [0.1, 0.09, 0.14], // world-space meters at mid size trait → rendered 0.07–0.11 m high, ~0.1–0.18 m long (a real frog)
   validTarget: inMarshZone, // marsh/water-edge constraint (wander targets only — see module header)
 };
 
-registerSpecies(ZABA);
+registerSpecies(FROG);

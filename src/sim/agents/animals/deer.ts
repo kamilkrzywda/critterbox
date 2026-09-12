@@ -1,5 +1,5 @@
 /**
- * sarna — roe deer (PLAN roster, Phase 4 Part B). The large browser of forest and meadow edge: eats reed +
+ * Deer — roe deer (PLAN roster, Phase 4 Part B). The large browser of forest and meadow edge: eats reed +
  * cranberry + TREE browse. Grazing a tree reduces its health/yield but the tree regrows (browsing only kills
  * a tree if it is driven to zero energy — see grazePlant); deer forage gently in practice because they stop
  * once back above their hunger threshold, so one bite every few minutes per tree. Slowest mover, longest
@@ -18,10 +18,10 @@
 import { registerSpecies } from '../../registry';
 import type { AnimalSpecies } from './base';
 
-export const SARNA: AnimalSpecies = {
-  id: 'sarna',
+export const DEER: AnimalSpecies = {
+  id: 'deer',
   kind: 'animal',
-  displayName: 'sarna (roe deer)',
+  displayName: 'Deer',
   traits: {
     speed: { min: 0.7, max: 1.2, sigma: 0.1 },
     size: { min: 3.5, max: 5.5, sigma: 0.4 },
@@ -47,4 +47,4 @@ export const SARNA: AnimalSpecies = {
   bodySize: [0.8, 1.75, 2.0], // world-space meters at mid size trait → rendered 1.3–2.2 m high, 1.5–2.5 m long (a real roe deer — was 6–10 m tall before the visual-scale fix)
 };
 
-registerSpecies(SARNA);
+registerSpecies(DEER);

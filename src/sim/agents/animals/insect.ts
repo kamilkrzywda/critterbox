@@ -1,11 +1,11 @@
 /**
- * owady — insects (PLAN roster, Phase 4 Part B). The pollinators and prey of the ecosystem: short-lived,
+ * Insect (PLAN roster, Phase 4 Part B). The pollinators and prey of the ecosystem: short-lived,
  * fast, low-energy, high-fertility. Behaviour deviates from the generic grazer via the base.ts hooks:
  *   - `decide`: when hungry, seek the nearest FLOWERING/FRUITING plant (the only nectar sources) instead of
  *     any edible plant; breeding/wander reuse the shared attemptMate/pickWanderTarget helpers.
  *   - `feedOnTarget`: a visit takes NECTAR_BIOMASS × digestionEfficiency of energy AND calls pollinatePlant —
  *     boosting that plant's growth/yield for POLLINATE_BOOST_TICKS ticks (per-plant cooldown in sim.ts).
- * Mice eat insects as prey (mysz.preySpecies) — the base of the Phase 5 predator chain. Self-registers into
+ * Mice eat insects as prey (mouse.preySpecies) — the base of the Phase 5 predator chain. Self-registers into
  * the species registry at load; everything else comes from ./base.ts parameterized by this table + traits.
  *
  * Traits (name / min / max / σ) — bounds clamp mutation; σ is the Gaussian sd applied at birth:
@@ -28,10 +28,10 @@ import { pollinatePlant } from '../../sim';
 /** Biomass-equivalent of one nectar visit (× digestionEfficiency → energy gained). */
 const NECTAR_BIOMASS = 12;
 
-export const OWADY: AnimalSpecies = {
-  id: 'owady',
+export const INSECT: AnimalSpecies = {
+  id: 'insect',
   kind: 'animal',
-  displayName: 'owady (insects)',
+  displayName: 'Insect',
   traits: {
     speed: { min: 1.0, max: 2.0, sigma: 0.15 },
     size: { min: 0.2, max: 0.4, sigma: 0.06 },
@@ -59,7 +59,7 @@ export const OWADY: AnimalSpecies = {
   feedOnTarget: feedOnNectar,
 };
 
-registerSpecies(OWADY);
+registerSpecies(INSECT);
 
 /** Insect decision tick: nectar when hungry (flowering/fruiting plants only), otherwise breed or wander. */
 function insectDecide(sim: Sim, a: Agent, sp: AnimalSpecies): void {

@@ -1,5 +1,5 @@
 /**
- * sowa — owl (PLAN roster, Phase 5). The nocturnal hunter of mouse/hare. Day/night arrives in Phase 7:
+ * Owl (PLAN roster, Phase 5). The nocturnal hunter of mouse/hare. Day/night arrives in Phase 7:
  * the framework's `activityLevel` hook gates hunting (base.decide requires activity > 0 before seeking
  * prey) and returns 1.0 for now — Phase 7 wires light → activity so owls hunt at night only while foxes
  * and storks rest. Until then the owl behaves like any other hunger-gated predator. Self-registers into
@@ -16,10 +16,10 @@
 import { registerSpecies } from '../../registry';
 import type { AnimalSpecies } from './base';
 
-export const SOWA: AnimalSpecies = {
-  id: 'sowa',
+export const OWL: AnimalSpecies = {
+  id: 'owl',
   kind: 'animal',
-  displayName: 'sowa (owl)',
+  displayName: 'Owl',
   traits: {
     speed: { min: 0.8, max: 1.3, sigma: 0.1 },
     size: { min: 1.5, max: 2.2, sigma: 0.15 },
@@ -43,9 +43,9 @@ export const SOWA: AnimalSpecies = {
   roostAnchored: true, // unanchored random-walk diffusion carried owls into "prey deserts" between mouse clusters
   popCap: 16,
   foodSpecies: [], // carnivore — prey only
-  preySpecies: ['mysz', 'zajac'],
+  preySpecies: ['mouse', 'hare'],
   bodySize: [0.32, 0.4, 0.4], // world-space meters at mid size trait → rendered 0.3–0.5 m high (a real owl)
   activityLevel: () => 1, // PHASE 7 HOOK: light → activity (nocturnal); hunting in base.decide is gated by this
 };
 
-registerSpecies(SOWA);
+registerSpecies(OWL);

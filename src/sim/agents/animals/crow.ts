@@ -1,5 +1,5 @@
 /**
- * wrona — crow (PLAN roster, Phase 5). The scavenger/generalist: eats CORPSES + insects + cranberry
+ * Crow (PLAN roster, Phase 5). The scavenger/generalist: eats CORPSES + insects + cranberry
  * berries. Fast and opportunistic with a decent breeding rate; like the fox it uses scavengerDecide so a
  * corpse in range beats live prey when hungry (scavenging is cheaper than hunting — no pursuit), closing
  * the nutrient loop on the other side of the food chain. Self-registers into the species registry at load;
@@ -17,10 +17,10 @@ import { registerSpecies } from '../../registry';
 import type { AnimalSpecies } from './base';
 import { scavengerDecide } from '../../corpses';
 
-export const WRONA: AnimalSpecies = {
-  id: 'wrona',
+export const CROW: AnimalSpecies = {
+  id: 'crow',
   kind: 'animal',
-  displayName: 'wrona (crow)',
+  displayName: 'Crow',
   traits: {
     speed: { min: 1.0, max: 1.6, sigma: 0.12 },
     size: { min: 1.0, max: 1.5, sigma: 0.12 },
@@ -43,9 +43,9 @@ export const WRONA: AnimalSpecies = {
   wanderRadius: 16, // forage the local area — food is widespread but stay put (Phase 5)
   popCap: 40,
   foodSpecies: ['cranberry'], // berries — the cheap generalist bonus on top of corpses + insects
-  preySpecies: ['owady'],
+  preySpecies: ['insect'],
   bodySize: [0.2, 0.26, 0.38], // world-space meters at mid size trait → rendered 0.2–0.33 m high, 0.29–0.48 m long (a real crow)
   decide: scavengerDecide, // corpse first when hungry, then insects/berries — see corpses.ts
 };
 
-registerSpecies(WRONA);
+registerSpecies(CROW);

@@ -20,16 +20,16 @@ import type { Sim } from './sim';
 import { TREE_VARIANT_BIRCH, TREE_VARIANT_OAK, TREE_VARIANT_PINE } from './agents/plants/tree';
 import { INITIAL_ANIMAL_ENERGY_FRACTION, animalEnergyMax, initialTraits, pickSex } from './agents/animals/base';
 import type { AnimalSpecies } from './agents/animals/base';
-import { MYSZ } from './agents/animals/mysz';
-import { ZAJAC } from './agents/animals/zajac';
-import { CHOMIK } from './agents/animals/chomik';
-import { SARNA } from './agents/animals/sarna';
-import { OWADY } from './agents/animals/owady';
-import { ZABA } from './agents/animals/zaba';
-import { LIS } from './agents/animals/lis';
-import { BOCIAN } from './agents/animals/bocian';
-import { SOWA } from './agents/animals/sowa';
-import { WRONA } from './agents/animals/wrona';
+import { MOUSE } from './agents/animals/mouse';
+import { HARE } from './agents/animals/hare';
+import { HAMSTER } from './agents/animals/hamster';
+import { DEER } from './agents/animals/deer';
+import { INSECT } from './agents/animals/insect';
+import { FROG } from './agents/animals/frog';
+import { FOX } from './agents/animals/fox';
+import { STORK } from './agents/animals/stork';
+import { OWL } from './agents/animals/owl';
+import { CROW } from './agents/animals/crow';
 
 /** Salt mixed into the world seed for the life-seeding PRNG (keeps it distinct from noise offsets). */
 const LIFE_SALT = 0x5eed;
@@ -50,9 +50,9 @@ const MOUSE_FAMILY_SIZE = 3;
 
 const HARE_FAMILIES = 12; // hare family clusters on meadow/grassland (~48 total — see placeFamily)
 const HARE_FAMILY_SIZE = 4;
-const CHOMIK_FAMILIES = 4; // hamster family clusters on grassland/forest-edge (~16 total)
-const CHOMIK_FAMILY_SIZE = 4;
-const SARNA_DENSITY = 0.00053; // ~8 roe deer on forest/meadow-edge
+const HAMSTER_FAMILIES = 4; // hamster family clusters on grassland/forest-edge (~16 total)
+const HAMSTER_FAMILY_SIZE = 4;
+const DEER_DENSITY = 0.00053; // ~8 roe deer on forest/meadow-edge
 /** Insects seed in small clusters (near flowers, so they find nectar + mates quickly). */
 const INSECT_CLUSTER_DENSITY = 0.0003; // per dry cell → ~21 clusters of 10 ≈ 250 insects on the default world
 const INSECT_CLUSTER_SIZE = 10; // insects per cluster (~250 total)
@@ -188,17 +188,17 @@ export function seedLife(sim: Sim): SeedStats {
 
   // --- Pass C: mouse FAMILIES on dry meadow/grassland cells (~72 in 24 small family clusters) ----------
   for (let f = 0; f < MOUSE_FAMILIES; f++) {
-    placeFamilyOnBiome(MYSZ, MOUSE_FAMILY_SIZE, (biome) => biome === BIOME_MEADOW || biome === BIOME_GRASSLAND);
+    placeFamilyOnBiome(MOUSE, MOUSE_FAMILY_SIZE, (biome) => biome === BIOME_MEADOW || biome === BIOME_GRASSLAND);
   }
 
   // --- Pass D: hare FAMILIES on dry meadow/grassland cells (~48 in 12 family clusters) ---------------------
   for (let f = 0; f < HARE_FAMILIES; f++) {
-    placeFamilyOnBiome(ZAJAC, HARE_FAMILY_SIZE, (biome) => biome === BIOME_MEADOW || biome === BIOME_GRASSLAND);
+    placeFamilyOnBiome(HARE, HARE_FAMILY_SIZE, (biome) => biome === BIOME_MEADOW || biome === BIOME_GRASSLAND);
   }
 
   // --- Pass E: hamster FAMILIES on dry grassland / forest-edge cells (~16 in 4 family clusters) -------
-  for (let f = 0; f < CHOMIK_FAMILIES; f++) {
-    placeFamilyOnBiome(CHOMIK, CHOMIK_FAMILY_SIZE, (biome, x, z) => biome === BIOME_GRASSLAND || (biome === BIOME_FOREST && isForestEdge(world, x, z)));
+  for (let f = 0; f < HAMSTER_FAMILIES; f++) {
+    placeFamilyOnBiome(HAMSTER, HAMSTER_FAMILY_SIZE, (biome, x, z) => biome === BIOME_GRASSLAND || (biome === BIOME_FOREST && isForestEdge(world, x, z)));
   }
 
   // --- Pass F: roe deer on dry forest / meadow-edge cells (~8) ---------------------------------------
@@ -210,8 +210,8 @@ export function seedLife(sim: Sim): SeedStats {
       const biome = world.biomes[i];
       const edge = biome === BIOME_MEADOW && touchesBiome(world, x, z, BIOME_FOREST);
       if (biome !== BIOME_FOREST && !edge) continue;
-      if (rng() >= SARNA_DENSITY) continue;
-      placeAnimal(SARNA, x - halfW + 0.5 + (rng() - 0.5), wz + (rng() - 0.5));
+      if (rng() >= DEER_DENSITY) continue;
+      placeAnimal(DEER, x - halfW + 0.5 + (rng() - 0.5), wz + (rng() - 0.5));
     }
   }
 
@@ -228,7 +228,7 @@ export function seedLife(sim: Sim): SeedStats {
         const pz = wz + (rng() - 0.5) * INSECT_CLUSTER_SPREAD;
         if (world.heightAt(px, pz) < world.waterLevel) continue; // cluster near a bank — skip the underwater member
         // Insects are short-lived: seed them as young adults so the population is already dynamic at t=0.
-        placeAnimal(OWADY, px, pz).age = INSECT_SEED_AGE;
+        placeAnimal(INSECT, px, pz).age = INSECT_SEED_AGE;
       }
     }
   }
@@ -241,7 +241,7 @@ export function seedLife(sim: Sim): SeedStats {
       if (world.heights[i] < world.waterLevel) continue; // dry land only
       if (world.biomes[i] !== BIOME_MARSH) continue; // marsh cells are exactly the water-edge band
       if (rng() >= FROG_DENSITY) continue;
-      placeAnimal(ZABA, x - halfW + 0.5 + (rng() - 0.5), wz + (rng() - 0.5));
+      placeAnimal(FROG, x - halfW + 0.5 + (rng() - 0.5), wz + (rng() - 0.5));
     }
   }
 
@@ -250,7 +250,7 @@ export function seedLife(sim: Sim): SeedStats {
   // predator's wander radius never carries it across the biome to find them. Placing each predator 5–15 m
   // from a real prey agent guarantees initial food access (Phase 5 stability tuning). Foxes land in
   // meadow/grassland by construction (that's where mice/hares live); storks next to frogs, i.e. the marsh.
-  const preyPools: Record<string, Agent[]> = { mysz: [], zajac: [], zaba: [] };
+  const preyPools: Record<string, Agent[]> = { mouse: [], hare: [], frog: [] };
   for (const a of sim.agents) {
     const pool = preyPools[a.species];
     if (pool) pool.push(a);
@@ -270,13 +270,13 @@ export function seedLife(sim: Sim): SeedStats {
       placed++;
     }
   };
-  placeNearPrey(LIS, FOX_TARGET, ['mysz', 'zajac']);
-  placeNearPrey(BOCIAN, STORK_TARGET, ['zaba', 'mysz']);
-  placeNearPrey(SOWA, OWL_TARGET, ['mysz', 'zajac']);
+  placeNearPrey(FOX, FOX_TARGET, ['mouse', 'hare']);
+  placeNearPrey(STORK, STORK_TARGET, ['frog', 'mouse']);
+  placeNearPrey(OWL, OWL_TARGET, ['mouse', 'hare']);
 
   // --- Pass L: crow FAMILIES anywhere on dry land (~12 in 4 family clusters) ----------------------------
   for (let f = 0; f < CROW_FAMILIES; f++) {
-    placeFamilyOnBiome(WRONA, CROW_FAMILY_SIZE, () => true);
+    placeFamilyOnBiome(CROW, CROW_FAMILY_SIZE, () => true);
   }
 
   return { total, perSpecies };
