@@ -23,6 +23,19 @@ const checksDir = join(root, 'scripts', 'checks');
 const SOURCES = [
   'src/worldgen/noise.ts',
   'src/worldgen/worldgen.ts',
+  'src/sim/rng.ts',
+  'src/sim/types.ts',
+  'src/sim/registry.ts',
+  'src/sim/spatial.ts',
+  'src/sim/energy.ts',
+  'src/sim/agents/plants/grass.ts',
+  'src/sim/agents/plants/clover.ts',
+  'src/sim/agents/plants/cranberry.ts',
+  'src/sim/agents/plants/reed.ts',
+  'src/sim/agents/plants/tree.ts',
+  'src/sim/agents/index.ts',
+  'src/sim/sim.ts',
+  'src/sim/seedLife.ts',
 ];
 
 let sections = 0;
@@ -70,7 +83,31 @@ try {
     const tmpRequire = createRequire(join(tmp, 'noop.cjs'));
     const worldgenMod = tmpRequire('./worldgen/worldgen.js');
     const noiseMod = tmpRequire('./worldgen/noise.js');
-    const ctxExtra = { worldgen: worldgenMod, noise: noiseMod };
+
+    // Require the species barrel first so every plant self-registers before any sim use (CJS caches it).
+    tmpRequire('./sim/agents/index.js');
+    const rngMod = tmpRequire('./sim/rng.js');
+    const typesMod = tmpRequire('./sim/types.js');
+    const registryMod = tmpRequire('./sim/registry.js');
+    const spatialMod = tmpRequire('./sim/spatial.js');
+    const energyMod = tmpRequire('./sim/energy.js');
+    const simCoreMod = tmpRequire('./sim/sim.js');
+    const seedLifeMod = tmpRequire('./sim/seedLife.js');
+
+    const ctxExtra = {
+      worldgen: worldgenMod,
+      noise: noiseMod,
+      sim: {
+        rng: rngMod,
+        types: typesMod,
+        registry: registryMod,
+        spatial: spatialMod,
+        energy: energyMod,
+        Sim: simCoreMod.Sim,
+        grazePlant: simCoreMod.grazePlant,
+        seedLife: seedLifeMod.seedLife,
+      },
+    };
 
     let files = [];
     try {

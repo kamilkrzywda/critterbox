@@ -51,6 +51,9 @@ export const BIOME_FOREST = 3;
 /** Human-readable biome names, indexed by biome id (for the inspector/HUD). */
 export const BIOME_NAMES: readonly string[] = ['marsh', 'meadow', 'grassland', 'forest'];
 
+/** Plant growth fertility multiplier per biome (indexed by biome id) — meadow is richest, dry grassland poorest. */
+export const BIOME_FERTILITY: readonly number[] = [0.85, 1.2, 0.7, 1.0]; // marsh, meadow, grassland, forest
+
 // --- Seed handling ------------------------------------------------------------------------
 
 /** Parse a user-supplied seed string: numeric → its unsigned integer value; empty/invalid → null. */

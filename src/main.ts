@@ -11,9 +11,22 @@ import type { World } from './worldgen/worldgen';
 import { buildTerrain, disposeTerrain } from './render/terrain';
 import { FreeFlightCamera, isTypingTarget } from './render/camera';
 import { initWorldgenPanel } from './ui/panel';
+import { Sim } from './sim/sim';
+import { seedLife } from './sim/seedLife';
+import { PlantRenderer } from './render/plants';
+import { initPopulationPanel } from './ui/population';
 
 const DEFAULT_SEED = 1337;
 const DEFAULT_SIZE = 300;
+
+/** Plant species shown in the population panel (animals are added here in Phase 4). */
+const PLANT_ROWS: { id: string; name: string }[] = [
+  { id: 'grass', name: 'trawa' },
+  { id: 'clover', name: 'koniczyna' },
+  { id: 'cranberry', name: 'borówka' },
+  { id: 'reed', name: 'trzcina' },
+  { id: 'tree', name: 'drzewo' },
+];
 
 // --- renderer / scene -------------------------------------------------------------------
 
@@ -59,13 +72,23 @@ function frameWorld(size: number): void {
 
 let world: World | null = null;
 let terrainGroup: THREE.Group | null = null;
+let sim: Sim | null = null;
+let plantRenderer: PlantRenderer | null = null;
 let refreshPanel: ((seed: number, size: number) => void) | null = null;
 
 function applyWorld(seed: number, size: number): World {
   if (terrainGroup) disposeTerrain(terrainGroup); // free the old world's GPU resources
+  if (plantRenderer) { plantRenderer.dispose(); scene.remove(plantRenderer.object); }
   world = generateWorld({ seed, size });
   terrainGroup = buildTerrain(world);
   scene.add(terrainGroup);
+
+  sim = new Sim(world);
+  seedLife(sim); // deterministic plant population derived from the world (same seed+size → identical)
+  plantRenderer = new PlantRenderer();
+  scene.add(plantRenderer.object);
+  plantRenderer.sync(sim.agents); // initial full instance upload
+
   frameWorld(world.size);
   refreshPanel?.(world.seed, world.size);
   return world;
@@ -85,6 +108,10 @@ const initial = applyWorld(readUrlSeed(), DEFAULT_SIZE);
 const panel = initWorldgenPanel({ onNewWorld: (seed, size) => { applyWorld(seed, size); } });
 refreshPanel = panel.setWorld;
 panel.setWorld(initial.seed, initial.size);
+
+// Population panel — one row per plant species, refreshed ~4 Hz from the sim's live stats.
+const popContainer = document.getElementById('population-panel');
+if (popContainer) initPopulationPanel(popContainer, PLANT_ROWS, () => sim?.populations() ?? {});
 
 // --- pause (Space) ---------------------------------------------------------------------------
 
@@ -107,12 +134,19 @@ window.addEventListener('keydown', (e) => {
 
 const SIM_STEP = 1 / 30; // sim tick rate: 30 steps/s at 1×
 const MAX_STEPS_PER_FRAME = 5; // clamp — never spiral after a long frame (Sandfall pattern)
+
+// PHASE 8 HOOK: the sim-speed slider multiplies time here (0× = pause, up to 8×). Kept as a plain
+// constant for now so the accumulator is already speed-ready; swap in the live slider value later.
+const SIM_SPEED = 1;
+
 let accumulator = 0;
 let lastTime = performance.now();
 let tick = 0;
 
 function stepSim(): void {
-  // Phase 3: advance agents on `world`. No-op for now.
+  if (!sim || !plantRenderer) return;
+  sim.step(); // advance agents one fixed tick (growth / stages / death)
+  plantRenderer.sync(sim.agents); // incremental instance updates from the change-feed
 }
 
 // --- debug surface --------------------------------------------------------------------------
@@ -130,6 +164,8 @@ declare global {
       camera: { pos: [number, number, number]; yaw: number; pitch: number };
       paused: boolean;
       setPaused(p: boolean): void;
+      agentCount: number;
+      populations: { [species: string]: { count: number; avgEnergy: number } };
     };
   }
 }
@@ -150,6 +186,8 @@ window.__critterbox = {
   get camera() { return { pos: flight.pos, yaw: flight.yaw, pitch: flight.pitch }; },
   get paused() { return paused; },
   setPaused(p: boolean): void { setPaused(!!p); },
+  get agentCount() { return sim ? sim.agents.length : 0; },
+  get populations() { return sim ? sim.populations() : {}; },
 };
 
 // --- render loop -----------------------------------------------------------------------------
@@ -162,7 +200,7 @@ function frame(now: number): void {
 
   flight.update(dt); // camera always flies, even while the sim is paused
   if (!paused) {
-    accumulator += dt;
+    accumulator += dt * SIM_SPEED; // PHASE 8 HOOK: speed multiplier applied here
     let steps = 0;
     while (accumulator >= SIM_STEP && steps < MAX_STEPS_PER_FRAME) {
       stepSim();
