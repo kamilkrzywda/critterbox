@@ -36,9 +36,9 @@ export const ZAJAC: AnimalSpecies = {
   hungerThreshold: 0.85, // forage below 85% of capacity
   maturityAge: 900, // ~30 s juvenile phase at 1×
   breedEnergyFraction: 0.6,
-  breedCooldownBase: 1800, // ÷ fertility → 1800–4500 ticks between litters (lower fertility than the mouse)
-  matingRange: 3.5,
-  wanderRadius: 25,
+  breedCooldownBase: 600, // ÷ fertility → 600–1500 ticks between litters (Phase 5 stability tuning)
+  matingRange: 10,
+  wanderRadius: 16, // stay near the family patch — wide radius diffuses hare families apart (Phase 5)
   popCap: 150,
   foodSpecies: ['grass', 'clover'],
   bodySize: [0.5, 0.35, 0.7], // medium brown hare ~0.7 m long at size=1 (rendering)

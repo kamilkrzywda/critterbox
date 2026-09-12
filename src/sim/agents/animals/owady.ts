@@ -50,7 +50,7 @@ export const OWADY: AnimalSpecies = {
   maturityAge: 120, // ~4 s juvenile phase at 1× — short-lived species mature fast
   breedEnergyFraction: 0.5,
   breedCooldownBase: 360, // ÷ fertility → 180–360 ticks between broods (high fertility)
-  matingRange: 2,
+  matingRange: 4,
   wanderRadius: 12,
   popCap: 600,
   foodSpecies: [], // no grazing — nectar only, via feedOnTarget

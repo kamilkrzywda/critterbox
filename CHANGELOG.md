@@ -2,6 +2,19 @@
 
 All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 
+## [0.6.0] - 2026-09-12
+
+### Added
+- Predators & scavengers complete the food chain: lis (fox), bocian (stork), sowa (owl), wrona (crow) + zaba (frog, marsh insectivore with cranberry fallback). Hunger-gated hunting — a predator only enters hunt state below its `hungerThreshold` fraction of capacity — with saturating intake: each kill raises satiation (scaled by how much of the predator's capacity the meal fills), so quick successive kills pay diminishing returns and prey patches can't be stripped
+- Corpses & scavenging: every animal death (starvation, old age, predation) leaves a decaying corpse entity (`Sim.corpses`, not agents — linear scan); fox & crow feed on carcasses via `scavengerDecide` (a corpse in range beats live prey when hungry), closing the nutrient loop
+- 20k-step population-stability harness (`scripts/checks/stability.mjs`) — the Phase 5 acceptance gate: every plant and animal must survive with per-species min ≥ 1, max ≤ popCap; prints a per-species min/max/avg stability report (seed 1337, default world)
+- Headless predator checks (`scripts/checks/predators.mjs`): predation (kill + energy gain + corpse at death location), hunger gating (a full fox never hunts with prey nearby), corpse decay + crow scavenging, saturating intake (diminishing yield per kill)
+
+### Changed
+- Long-run stability tuning (all deterministic, seed 1337): family-cluster seeding for sparse species (guaranteed opposite-sex pairs so breeding starts before the initial cohort's old-age wave hits), roost-anchored wander + relocation for foxes/owls (unanchored random-walk diffusion carried them into "prey deserts" between clusters, past their ~45 m foraging range), directional foraging (a hungry animal with nothing in kill range steers toward the nearest food beyond sense radius instead of wandering blindly), size-scaled satiation so small-meal generalists aren't over-braked
+- Plant edibility is now stage/energy-based: unestablished shoots (non-fruiting below 60% of maxEnergy) are inedible — one bite would drop them under the regrowth floor; replaces an earlier age-based grace period. Seed dispersal gained biome fidelity (a seedling only establishes in the parent's biome — without it, marsh cranberries crept ~40 m into dry meadow over long runs and grew unbounded)
+- Population caps: zaba 90 (the marsh food base can't support more), per-species tuning of hunger gates / breeding cooldowns / mating ranges for a stable 20k-step run — all core species hold with margin (mice/hares/hamsters/frogs/crows at cap, foxes ~8–15, owls ~6–10, storks 4–8)
+
 ## [0.5.0] - 2026-09-12
 
 ### Added

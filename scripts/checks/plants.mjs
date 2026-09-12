@@ -102,12 +102,13 @@ export default {
     }
     ctx.check('plants: total population is in the few-thousand–20k target band', stats.total >= 1000 && stats.total <= 25000);
 
-    // After a short run, PLANT populations only shrink (plants don't reproduce; animals may breed — Phase 4).
+    // Phase 5: grazers disperse seeds (every consumer is a disperser — Sandfall dung-seed pattern), so plant
+    // populations can now grow modestly; over a short run the total stays in a tight band of the seeded value.
     const initialPlantTotal = PLANTS.reduce((s, sp) => s + (stats.perSpecies[sp] ?? 0), 0);
     for (let i = 0; i < 60; i++) sim.step();
     const after = sim.populations();
     const plantTotal = PLANTS.reduce((s, sp) => s + (after[sp]?.count ?? 0), 0);
-    ctx.check(`plants: plant population does not grow without reproduction (${plantTotal} ≤ ${initialPlantTotal})`, plantTotal <= initialPlantTotal);
+    ctx.check(`plants: seed dispersal keeps the total in a tight band (${plantTotal} vs seeded ${initialPlantTotal})`, plantTotal > initialPlantTotal * 0.9 && plantTotal <= initialPlantTotal * 1.25);
     ctx.check('plants: grass still present after a short run', (after.grass?.count ?? 0) > 0);
   },
 };

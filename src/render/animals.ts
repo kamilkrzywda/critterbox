@@ -22,6 +22,11 @@ const PALETTES: Record<string, RGB> = {
   chomik: [0.72, 0.6, 0.42], // tan stocky hamster
   sarna: [0.55, 0.33, 0.22], // large reddish-brown roe deer
   owady: [0.16, 0.14, 0.12], // tiny dark speck (insect)
+  zaba: [0.3, 0.58, 0.2], // green low body near water (frog)
+  lis: [0.78, 0.38, 0.14], // orange-red fox
+  bocian: [0.9, 0.87, 0.82], // white stork (the red bill/legs hint is left to the jitter)
+  sowa: [0.45, 0.32, 0.2], // brown round owl
+  wrona: [0.1, 0.1, 0.12], // small black crow
 };
 const FALLBACK: RGB = [0.5, 0.42, 0.3];
 /** Per-instance colour jitter amount (fraction of the base channel). */

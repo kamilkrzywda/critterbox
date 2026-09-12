@@ -25,6 +25,7 @@ export const TREE: PlantSpecies = {
   regrowthFloor: 0.4,
   yieldAmount: 60,
   preferredBiomes: [BIOME_FOREST],
+  seedExcludeRadius: 8, // big canopy — wide exclusion keeps self-seeded forest spread bounded (Phase 5)
 };
 
 registerSpecies(TREE);

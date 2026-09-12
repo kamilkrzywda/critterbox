@@ -36,8 +36,8 @@ export const CHOMIK: AnimalSpecies = {
   hungerThreshold: 0.85, // forage below 85% of capacity
   maturityAge: 700, // ~23 s juvenile phase at 1×
   breedEnergyFraction: 0.6,
-  breedCooldownBase: 1200, // ÷ fertility → ~923–2000 ticks between litters (decent breeder)
-  matingRange: 3,
+  breedCooldownBase: 800, // ÷ fertility → ~615–1333 ticks between litters (Phase 5 stability tuning)
+  matingRange: 10,
   wanderRadius: 20,
   popCap: 200,
   foodSpecies: ['grass', 'clover', 'cranberry'], // seed eater — berries included

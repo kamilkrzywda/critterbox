@@ -128,7 +128,7 @@ export default {
     // --- starvation ---------------------------------------------------------------------------
     const sim1 = new Sim(world);
     let deadAge = -1, deadEnergy = -1;
-    const unsub1 = ctx.sim.animals.registerAnimalDeathHook((a) => { deadAge = a.age; deadEnergy = a.energy; });
+    const unsub1 = ctx.sim.animals.registerAnimalDeathHook((_sim, a) => { deadAge = a.age; deadEnergy = a.energy; }); // Phase 5: hook receives (sim, agent)
     const hungry = sim1.addAgent('mysz', 0, 0);
     hungry.sex = 'f';
     hungry.traits = midTraits(MYSZ);
@@ -149,7 +149,7 @@ export default {
     aged.energy = 95; // well fed — must die of OLD AGE, not starvation
 
     let oldDead = null;
-    const unsub2 = ctx.sim.animals.registerAnimalDeathHook((a) => { if (a.id === aged.id) oldDead = { age: a.age, energy: a.energy }; });
+    const unsub2 = ctx.sim.animals.registerAnimalDeathHook((_sim, a) => { if (a.id === aged.id) oldDead = { age: a.age, energy: a.energy }; }); // Phase 5: hook receives (sim, agent)
     sim2.step(); // age → L: still alive at its lifespan tick
     ctx.check('animals: an animal at its lifespan tick is still alive', sim2.agents.includes(aged));
     sim2.step(); // age → L+1 > L: old-age death
@@ -283,7 +283,7 @@ export default {
 
     const sim = new Sim(world);
     let preyDeathSeen = null;
-    const unsub = ctx.sim.animals.registerAnimalDeathHook((a) => { if (a.species === 'owady') preyDeathSeen = a.id; });
+    const unsub = ctx.sim.animals.registerAnimalDeathHook((_sim, a) => { if (a.species === 'owady') preyDeathSeen = a.id; }); // Phase 5: hook receives (sim, agent)
 
     const bug = sim.addAgent('owady', 10, 10);
     bug.sex = 'm';

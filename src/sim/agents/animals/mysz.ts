@@ -37,8 +37,8 @@ export const MYSZ: AnimalSpecies = {
   hungerThreshold: 0.85, // forage below 85% of capacity
   maturityAge: 600, // ~20 s juvenile phase at 1×
   breedEnergyFraction: 0.6,
-  breedCooldownBase: 900, // ÷ fertility → 643–1500 ticks between litters
-  matingRange: 3,
+  breedCooldownBase: 450, // ÷ fertility → 321–750 ticks between litters (tiny fast breeder — Phase 5 stability tuning)
+  matingRange: 8,
   wanderRadius: 18,
   popCap: 400,
   foodSpecies: ['grass', 'clover'],

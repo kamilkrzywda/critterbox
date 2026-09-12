@@ -36,11 +36,18 @@ const SOURCES = [
   'src/sim/agents/plants/reed.ts',
   'src/sim/agents/plants/tree.ts',
   'src/sim/agents/animals/base.ts',
+  'src/sim/corpses.ts',
   'src/sim/agents/animals/mysz.ts',
   'src/sim/agents/animals/zajac.ts',
   'src/sim/agents/animals/chomik.ts',
   'src/sim/agents/animals/sarna.ts',
   'src/sim/agents/animals/owady.ts',
+  // Phase 5: frogs + the predator/scavenger layer
+  'src/sim/agents/animals/zaba.ts',
+  'src/sim/agents/animals/lis.ts',
+  'src/sim/agents/animals/bocian.ts',
+  'src/sim/agents/animals/sowa.ts',
+  'src/sim/agents/animals/wrona.ts',
   'src/sim/agents/index.ts',
   'src/sim/sim.ts',
   'src/sim/seedLife.ts',
@@ -109,6 +116,13 @@ try {
     const chomikMod = tmpRequire('./sim/agents/animals/chomik.js');
     const sarnaMod = tmpRequire('./sim/agents/animals/sarna.js');
     const owadyMod = tmpRequire('./sim/agents/animals/owady.js');
+    // Phase 5: frogs + the predator/scavenger layer (corpses module carries the scavenging API)
+    const zabaMod = tmpRequire('./sim/agents/animals/zaba.js');
+    const lisMod = tmpRequire('./sim/agents/animals/lis.js');
+    const bocianMod = tmpRequire('./sim/agents/animals/bocian.js');
+    const sowaMod = tmpRequire('./sim/agents/animals/sowa.js');
+    const wronaMod = tmpRequire('./sim/agents/animals/wrona.js');
+    const corpsesMod = tmpRequire('./sim/corpses.js');
 
     const ctxExtra = {
       worldgen: worldgenMod,
@@ -130,6 +144,12 @@ try {
         chomik: chomikMod.CHOMIK,
         sarna: sarnaMod.SARNA,
         owady: owadyMod.OWADY,
+        zaba: zabaMod.ZABA, // Phase 5 species tables (trait bounds for assertions)
+        lis: lisMod.LIS,
+        bocian: bocianMod.BOCIAN,
+        sowa: sowaMod.SOWA,
+        wrona: wronaMod.WRONA,
+        corpses: corpsesMod, // corpse layer: spawnCorpse/findNearestCorpse/scavengeCorpse + decay constant
       },
     };
 

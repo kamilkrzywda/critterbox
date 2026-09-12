@@ -13,7 +13,8 @@
  *     the total spend — i.e. the spend split between both parents, halved into one child (the rest is
  *     lost to reproduction)
  * Death: starvation (energy ≤ 0) or old age (age > lifespan trait). Removal goes through the
- * onAnimalDeath hook registry — Phase 5 attaches corpses; it is a no-op until then.
+ * onAnimalDeath hook registry — Phase 5 attaches corpses via it (see sim/corpses.ts): every death
+ * (starvation, old age OR predation) spawns a decaying corpse at the victim's position.
  *
  * Behaviour state machine (Agent.state): idle/wander → seekFood → eat → mate. Decisions are sampled
  * every DECISION_EVERY ticks, staggered by agent id ((stepCount + id) % DECISION_EVERY === 0), so the
@@ -23,13 +24,28 @@
  *
  * Part B hooks: a species may override `decide` (insects pollinate instead of grazing), supply a
  * `feedOnTarget` action (nectar visits), or list `preySpecies` — arriving at an animal target kills it
- * via Sim.killAgent and digests its energy. attemptMate/pickWanderTarget/canAttemptBreed are exported
- * so custom decides reuse the exact same breeding/wander logic as the generic one.
+ * via Sim.killAgent and digests its energy. attemptMate/pickWanderTarget/canAttemptBreed/seekNearestFood
+ * are exported so custom decides reuse the exact same breeding/wander/forage logic as the generic one.
+ *
+ * Phase 5 (predators & scavengers):
+ *   - Predation is HUNGER-GATED: an animal only seeks food/prey below its hungerThreshold fraction of
+ *     capacity — full predators wander/breed like herbivores (Sandfall's snake lesson: gating prevents
+ *     the classic predator-prey overshoot/oscillation).
+ *   - SATURATING INTAKE (Holling-type): each kill raises data.sat by SAT_PER_KILL; a kill's yield is
+ *     victimEnergy × digestionEfficiency × (1 − sat), and sat decays SAT_DECAY_PER_TICK per tick. A few
+ *     kills within seconds pay sharply diminishing returns, so one predator can't wipe a local prey
+ *     patch in minutes even while still below its hunger threshold.
+ *   - Scavenging: data.corpseTarget marks a SEEK_FOOD target that is a CORPSE POINT (tx/tz, no agent id);
+ *     on arrival the animal feeds via Sim.scavengeAt (see sim/corpses.ts) — cheaper than hunting (no pursuit).
+ *   - `validTarget` hook: species may validate WANDER targets against the biome/height field (frogs and
+ *     storks stay in marsh/water-edge zones); prey pursuit is exempt so they can still catch edge-dwelling
+ *     prey. `activityLevel` hook: returns the current activity multiplier (1.0 for now — Phase 7 wires
+ *     light → activity, e.g. owls hunt at night only; hunting requires activity > 0).
  */
 
 import { agentGaussian, agentRand } from '../../rng';
-import type { Agent, Sex, Species } from '../../types';
-import { ANIMAL_STATE_EAT, ANIMAL_STATE_IDLE, ANIMAL_STATE_MATE, ANIMAL_STATE_SEEK_FOOD, ANIMAL_STATE_WANDER } from '../../types';
+import type { Agent, PlantSpecies, Sex, Species } from '../../types';
+import { ANIMAL_STATE_EAT, ANIMAL_STATE_IDLE, ANIMAL_STATE_MATE, ANIMAL_STATE_SEEK_FOOD, ANIMAL_STATE_WANDER, STAGE_FRUITING } from '../../types';
 import { getSpecies } from '../../registry';
 import { clampEnergy, metabolismDrain } from '../../energy';
 import type { Sim } from '../../sim';
@@ -45,6 +61,18 @@ export const INITIAL_ANIMAL_ENERGY_FRACTION = 0.6;
 export const BREED_COST_FRACTION = 0.3;
 /** Ticks between behaviour decisions, staggered by agent id ((stepCount + id) % DECISION_EVERY === 0). */
 export const DECISION_EVERY = 5;
+// --- Saturating intake (Phase 5, Holling-type) -----------------------------------------------
+/** A kill that fills this fraction of the predator's capacity adds a full point of satiation — smaller
+ *  meals add proportionally less (gained / (capacity × SAT_FULL_MEAL_FRACTION)). This keeps the effect
+ *  strong for predators on comparable-sized prey (a fox eating mice) while leaving generalists that live
+ *  on small meals (crows/frogs on insects) effectively unsaturated. */
+export const SAT_FULL_MEAL_FRACTION = 0.5;
+/** Per-tick satiation decay — the window over which successive kills pay less (~170 ticks to reset). Tuned
+ *  so that a predator's coast between hunting bouts (≥ ~250 ticks at the hunger gate) fully resets
+ *  satiation — each bout starts fresh, no chronic deficit — while kills WITHIN a bout (~40–60 ticks apart)
+ *  still pay strongly diminishing returns: predators hunt in paced bouts instead of stripping their prey
+ *  patch continuously (Phase 5 stability tuning). */
+export const SAT_DECAY_PER_TICK = 0.006;
 
 // --- trait model ------------------------------------------------------------------------------
 
@@ -86,12 +114,24 @@ export interface AnimalSpecies extends Species {
   matingRange: number;
   /** Wander target radius (m). */
   wanderRadius: number;
+  /** When set, WANDER targets are drawn around the animal's ROOST (its position on first decision ≈
+   *  placement/birth point) instead of its current position. Unanchored random-walk diffusion carries a
+   *  predator 100–200 m from its prey patch over ~10k ticks, past its foraging range — Phase 5 stability
+   *  runs showed foxes/owls starving in "prey deserts" between clusters. Roost-anchored predators patrol a
+   *  fixed home range and only travel when hungry (directional foraging). */
+  roostAnchored?: boolean;
   /** Hard population cap per species — breeding blocked at/above it. */
   popCap: number;
   /** Plant species ids this animal eats. */
   foodSpecies: readonly string[];
   /** Animal species ids this animal preys on (Phase 4 Part B: mice eat insects); prey are killed when fed upon. */
   preySpecies?: readonly string[];
+  /** Optional WANDER-target validation against the biome/height field (frogs/storks stay in marsh/water-edge).
+   *  Prey pursuit is exempt — a frog may still chase an insect that strays upland. */
+  validTarget?: (sim: Sim, x: number, z: number) => boolean;
+  /** Activity hook (Phase 5/7): current activity multiplier in [0,1]; hunting requires > 0. Returns 1.0 for
+   *  diurnal species by default (unset); Phase 7 wires light → activity so owls hunt at night only. */
+  activityLevel?: () => number;
   /** Body box dimensions in meters at size trait = 1 (rendering). */
   bodySize: [number, number, number];
   /** Optional species-specific decision override (insects pollinate instead of grazing). When set, replaces the generic decide(). */
@@ -113,10 +153,11 @@ function temperatureMod(): number {
 
 // --- death hooks -------------------------------------------------------------------------------
 
-type AnimalDeathHook = (agent: Agent) => void;
+/** Death hook — receives the SIM the animal belongs to (Phase 5 routes corpses onto it) + the dying agent. */
+type AnimalDeathHook = (sim: Sim, agent: Agent) => void;
 const deathHooks = new Set<AnimalDeathHook>();
 
-/** Register a hook called when an animal dies (Phase 5 attaches corpse creation). Returns an unsubscribe. */
+/** Register a hook called when an animal dies (starvation, old age, or predation). Returns an unsubscribe. */
 export function registerAnimalDeathHook(hook: AnimalDeathHook): () => void {
   deathHooks.add(hook);
   return () => {
@@ -125,8 +166,8 @@ export function registerAnimalDeathHook(hook: AnimalDeathHook): () => void {
 }
 
 /** Fire the registered death hooks for a dying animal (starvation, old age, or predation via Sim.killAgent). */
-export function notifyAnimalDeath(a: Agent): void {
-  for (const h of deathHooks) h(a);
+export function notifyAnimalDeath(sim: Sim, a: Agent): void {
+  for (const h of deathHooks) h(sim, a);
 }
 
 // --- traits & birth ------------------------------------------------------------------------------
@@ -224,7 +265,7 @@ export function tryBreed(sim: Sim, a: Agent, b: Agent, sp: AnimalSpecies): boole
  * per step, after plants (see Sim.step).
  */
 export function updateAnimal(sim: Sim, a: Agent): boolean {
-  const sp = getSpecies(a.species);
+  const sp = sim.speciesOf(a.id) ?? getSpecies(a.species); // dense cache first (hot path), registry fallback
   if (!sp || sp.kind !== 'animal') return true; // defensive — plants are handled by updatePlant
   const as_ = sp as AnimalSpecies;
   const t = a.traits ?? {};
@@ -232,16 +273,23 @@ export function updateAnimal(sim: Sim, a: Agent): boolean {
   // --- age + vital death (checked first: last tick's drain/movement may have emptied the store) ---
   a.age += 1;
   if (a.energy <= 0) {
-    notifyAnimalDeath(a);
+    notifyAnimalDeath(sim, a);
     return false; // starvation
   }
   if (a.age > (t.lifespan ?? as_.maturityAge * 20)) {
-    notifyAnimalDeath(a);
+    notifyAnimalDeath(sim, a);
     return false; // old age
   }
 
   // --- metabolism drain (temperature hook → Phase 7) ---------------------------------------------
   a.energy -= metabolismDrain(as_.baseMetabolism * (t.metabolism ?? 1), temperatureMod());
+
+  // --- satiation decay (Phase 5): the "short window" of saturating intake shrinks every tick -------
+  const mem0 = a.data;
+  if (mem0 && mem0.sat !== undefined && mem0.sat > 0) {
+    const s = mem0.sat - SAT_DECAY_PER_TICK;
+    mem0.sat = s <= 0 ? 0 : s;
+  }
 
   // --- behaviour decision, sampled every DECISION_EVERY ticks, staggered by id --------------------
   if ((sim.stepCount + a.id) % DECISION_EVERY === 0) decide(sim, a, as_);
@@ -254,6 +302,19 @@ export function updateAnimal(sim: Sim, a: Agent): boolean {
     const d2 = dx * dx + dz * dz;
 
     if (a.state === ANIMAL_STATE_SEEK_FOOD) {
+      if (mem.corpseTarget !== undefined) {
+        // Scavenging target (Phase 5): a corpse POINT, not an agent — feed on arrival.
+        if (d2 <= as_.eatRange * as_.eatRange) {
+          const gained = sim.scavengeAt(mem.tx, mem.tz, as_.eatRange, as_.eatAmount, as_.digestionEfficiency);
+          if (gained > 0) a.energy = clampEnergy(a.energy + gained, animalEnergyMax(a));
+          delete mem.tx;
+          delete mem.tz;
+          delete mem.corpseTarget;
+          a.state = ANIMAL_STATE_EAT; // corpse gone or empty — re-decide on the next cycle
+        } else {
+          moveToward(sim, a, as_, t, dx, dz, d2);
+        }
+      } else {
       const targetId = mem.targetId;
       const plant = targetId !== undefined ? sim.agentById(targetId) : undefined;
       if (!plant || plant.energy <= 0) {
@@ -267,14 +328,21 @@ export function updateAnimal(sim: Sim, a: Agent): boolean {
         let gained = 0;
         const targetSp = getSpecies(plant.species);
         if (targetSp?.kind === 'animal') {
-          // Predation (Phase 4 Part B): the prey is killed and its energy digested.
+          // Predation (Phase 4 Part B): the prey is killed and its energy digested — with Phase 5's
+          // saturating intake: each kill raises satiation (scaled by how much of the predator's capacity
+          // the meal fills), so quick successive kills pay diminishing returns.
           sim.killAgent(plant);
-          gained = plant.energy * as_.digestionEfficiency;
+          const sat = mem.sat ?? 0;
+          gained = plant.energy * as_.digestionEfficiency * (1 - sat);
+          mem.sat = Math.min(1, sat + gained / (animalEnergyMax(a) * SAT_FULL_MEAL_FRACTION));
         } else if (as_.feedOnTarget) {
           gained = as_.feedOnTarget(sim, a, as_, plant); // e.g. insects take nectar + pollinate
         } else {
           const removed = grazePlant(plant, as_.eatAmount);
-          if (removed > 0) gained = removed * as_.digestionEfficiency;
+          if (removed > 0) {
+            gained = removed * as_.digestionEfficiency;
+            disperseSeed(sim, plant); // every consumer is a disperser (Sandfall dung-seed pattern)
+          }
         }
         if (gained > 0) a.energy = clampEnergy(a.energy + gained, animalEnergyMax(a));
         delete mem.tx;
@@ -284,6 +352,7 @@ export function updateAnimal(sim: Sim, a: Agent): boolean {
       } else {
         moveToward(sim, a, as_, t, dx, dz, d2);
       }
+      } // end non-corpse SEEK_FOOD branch
     } else if (d2 > 1e-9) {
       // wander / mate: just walk to the target point
       moveToward(sim, a, as_, t, dx, dz, d2);
@@ -293,7 +362,7 @@ export function updateAnimal(sim: Sim, a: Agent): boolean {
   return true;
 }
 
-/** Pick the animal's next goal on its decision tick: food when hungry, otherwise breeding or wander. */
+/** Pick the animal's next goal on its decision tick: food when hungry (and active), otherwise breeding or wander. */
 function decide(sim: Sim, a: Agent, sp: AnimalSpecies): void {
   if (sp.decide) {
     sp.decide(sim, a, sp); // species-specific behaviour (insects pollinate instead of grazing)
@@ -302,32 +371,35 @@ function decide(sim: Sim, a: Agent, sp: AnimalSpecies): void {
   if (!a.data) a.data = {};
   const d = a.data;
 
-  // 1) Hungry → seek the nearest edible plant or prey animal within sense radius.
-  if (a.energy / animalEnergyMax(a) < sp.hungerThreshold) {
-    let best: Agent | null = null;
-    let bestD2 = Infinity;
-    for (const id of sim.grid.query(a.pos.x, a.pos.z, sp.senseRadius)) {
-      const p = sim.agentById(id);
-      if (!p || p.id === a.id || p.energy <= 0) continue; // self is never food
-      const ps = getSpecies(p.species);
-      if (!ps) continue;
-      let edible: boolean;
-      if (ps.kind === 'plant') edible = sp.foodSpecies.includes(p.species);
-      else edible = sp.preySpecies?.includes(p.species) ?? false; // prey animal (mice eat insects)
-      if (!edible) continue;
-      const dx = p.pos.x - a.pos.x;
-      const dz = p.pos.z - a.pos.z;
-      const dist2 = dx * dx + dz * dz;
-      if (dist2 < bestD2) {
-        bestD2 = dist2;
-        best = p;
-      }
-    }
+  // 1) Hungry AND active → seek the nearest edible plant or prey animal within sense radius.
+  //    The activityLevel hook (Phase 7: light → activity, e.g. owls hunt at night only) gates hunting.
+  const active = sp.activityLevel ? sp.activityLevel() : 1;
+  if (active > 0 && a.energy / animalEnergyMax(a) < sp.hungerThreshold) {
+    const best = seekNearestFood(sim, a, sp);
     if (best) {
       d.tx = best.pos.x;
       d.tz = best.pos.z;
       d.targetId = best.id;
+      delete d.corpseTarget;
       a.state = ANIMAL_STATE_SEEK_FOOD;
+      return;
+    }
+    // Nothing in kill range — steer toward the nearest food BEYOND sense radius instead of wandering
+    // blindly. Predators that drift out of their prey patch would otherwise starve: random-walk diffusion
+    // carries them past the cluster and they never find their way back (Phase 5 stability tuning). The
+    // target is a step partway toward the food, not a full chase — once in range, the next decide switches
+    // to proper pursuit.
+    const far = seekNearestFood(sim, a, sp, sp.senseRadius * FORAGE_SEARCH_MULT);
+    if (far) {
+      const dx = far.pos.x - a.pos.x;
+      const dz = far.pos.z - a.pos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz) || 1;
+      const step = Math.min(dist * 0.5, sp.wanderRadius); // one wander-step's worth toward the food
+      d.tx = a.pos.x + (dx / dist) * step;
+      d.tz = a.pos.z + (dz / dist) * step;
+      delete d.targetId;
+      delete d.corpseTarget;
+      a.state = ANIMAL_STATE_WANDER;
       return;
     }
   }
@@ -340,6 +412,110 @@ function decide(sim: Sim, a: Agent, sp: AnimalSpecies): void {
 
   // 3) Otherwise wander to a fresh random point.
   pickWanderTarget(sim, a, sp);
+}
+
+/** Minimum energy fraction (of maxEnergy) at which a non-fruiting plant is edible: below this, one graze
+ *  bite drops the plant under its regrowth floor and mows it back — grazers skip unestablished shoots.
+ *  FRUITING plants are always edible regardless of energy. Stage/energy-based (not age-based) so headless
+ *  checks that create a fresh FRUITING plant and expect immediate grazing still work, while freshly
+ *  dispersed seedlings in the live sim stay protected until they're robust enough to survive a bite
+ *  (Phase 5 stability tuning — replaces an earlier age-based grace period). */
+export const PLANT_MIN_EDIBLE_FRACTION = 0.6;
+
+/** How far beyond senseRadius a hungry animal scans when nothing is in kill range (directional foraging,
+ *  see decide). Only used as a fallback — the common case stays a cheap local query. ×6 covers the gaps
+ *  between prey clusters on the default world (fox: ~108 m, owl: ~180 m) so a stranded predator can always
+ *  find its way back to food (Phase 5 stability tuning). */
+const FORAGE_SEARCH_MULT = 6;
+
+/**
+ * Nearest edible agent (plant in foodSpecies or animal in preySpecies) within `radius` (default: the
+ * species' senseRadius), via the spatial grid — null when nothing is in range. Exported so custom decides
+ * (scavengers, insects) reuse it.
+ */
+export function seekNearestFood(sim: Sim, a: Agent, sp: AnimalSpecies, radius?: number): Agent | null {
+  let best: Agent | null = null;
+  let bestD2 = Infinity;
+  for (const id of sim.grid.query(a.pos.x, a.pos.z, radius ?? sp.senseRadius)) {
+    const p = sim.agentById(id);
+    if (!p || p.id === a.id || p.energy <= 0) continue; // self is never food
+    const ps = getSpecies(p.species);
+    if (!ps) continue;
+    let edible: boolean;
+    if (ps.kind === 'plant') {
+      const psp = ps as PlantSpecies;
+      // Unestablished shoots are inedible — see PLANT_MIN_EDIBLE_FRACTION.
+      if (p.state !== STAGE_FRUITING && p.energy < PLANT_MIN_EDIBLE_FRACTION * psp.maxEnergy) continue;
+      edible = sp.foodSpecies.includes(p.species);
+    } else {
+      edible = sp.preySpecies?.includes(p.species) ?? false; // prey animal (mice eat insects, foxes hunt…)
+    }
+    if (!edible) continue;
+    const dx = p.pos.x - a.pos.x;
+    const dz = p.pos.z - a.pos.z;
+    const dist2 = dx * dx + dz * dz;
+    if (dist2 < bestD2) {
+      bestD2 = dist2;
+      best = p;
+    }
+  }
+  return best;
+}
+
+/**
+ * Seed dispersal via consumers (Sandfall "every consumer is also a disperser" — dung seeds / frugivory):
+ * after a successful graze, the plant drops a seedling of its own species within SEED_DROP_RANGE on dry
+ * land, with probability PLANT_SEED_PROB. Deterministic per (plant id, tick) via agentRand — independent
+ * of processing order. This is what keeps plant populations alive past old-age death in long runs
+ * (Phase 5 stability gate): birth rate is bounded by the capped herbivore base, so it self-limits.
+ */
+const PLANT_SEED_PROB = 0.6; // per successful graze event (tuned in Phase 5 stability runs)
+/** Meters — short-range canopy/dung drop around the parent plant (Sandfall monkey pattern). */
+export const SEED_DROP_RANGE = 3;
+/** Same-species exclusion radius for new seedlings: no seed lands within this of an existing conspecific.
+ *  This is the plant carrying capacity — it bounds populations by area (~1 per 8 m², close to the seeded
+ *  densities) so self-seeding can never stack agents unboundedly. */
+export const SEED_EXCLUDE_RADIUS = 3;
+
+/** True when a seedling of `speciesId` may stand at (x,z) — no conspecific within the species' exclusion radius. */
+export function canDropSeed(sim: Sim, x: number, z: number, speciesId: string, excludeId?: number): boolean {
+  const sp = getSpecies(speciesId);
+  const r = sp?.kind === 'plant' ? (sp as PlantSpecies).seedExcludeRadius ?? SEED_EXCLUDE_RADIUS : SEED_EXCLUDE_RADIUS;
+  const ex2 = r * r;
+  // The grid query is a cell-based superset — the exact distance test happens here.
+  for (const id of sim.grid.query(x, z, r)) {
+    if (id === excludeId) continue; // the parent plant itself never blocks its own seed
+    const p = sim.agentById(id);
+    if (!p || p.species !== speciesId) continue;
+    const dx = p.pos.x - x;
+    const dz = p.pos.z - z;
+    if (dx * dx + dz * dz <= ex2) return false;
+  }
+  return true;
+}
+
+/**
+ * Draw a drop point within SEED_DROP_RANGE of the parent plant (deterministic per plant+tick via agentRand),
+ * check water + the same-species exclusion, and spawn the seedling when allowed. Returns true when it did.
+ */
+export function dropSeedlingNearby(sim: Sim, plant: Agent): boolean {
+  const ang = agentRand(plant.id, sim.stepCount, 0x5ee1) * Math.PI * 2;
+  const dist = (0.4 + 0.6 * agentRand(plant.id, sim.stepCount, 0x5ee2)) * SEED_DROP_RANGE;
+  const nx = plant.pos.x + Math.cos(ang) * dist;
+  const nz = plant.pos.z + Math.sin(ang) * dist;
+  if (sim.world.heightAt(nx, nz) < sim.world.waterLevel) return false; // no seeds underwater
+  // Biome fidelity: a seedling only establishes in the parent's biome — habitat suitability keeps species
+  // on their home ground. Without it, iterative ≤3 m hops compound over long runs and marsh cranberries
+  // crept ~40 m into dry meadow where nothing grazes them, growing unbounded (Phase 5 stability tuning).
+  if (sim.world.biomeAt(nx, nz) !== sim.world.biomeAt(plant.pos.x, plant.pos.z)) return false;
+  if (!canDropSeed(sim, nx, nz, plant.species, plant.id)) return false; // carrying capacity (parent excluded)
+  sim.addAgent(plant.species, nx, nz); // seedling stage at the initial energy fraction
+  return true;
+}
+
+function disperseSeed(sim: Sim, plant: Agent): void {
+  if (agentRand(plant.id, sim.stepCount, 0x5eed) >= PLANT_SEED_PROB) return;
+  dropSeedlingNearby(sim, plant);
 }
 
 /** Search for an opposite-sex partner within matingRange and try to breed with the first eligible one. */
@@ -356,16 +532,51 @@ export function attemptMate(sim: Sim, a: Agent, sp: AnimalSpecies): boolean {
   return false;
 }
 
-/** Pick a fresh random wander point within wanderRadius (clamped to the world) and set state WANDER. */
+/**
+ * Pick a fresh random wander point within wanderRadius (clamped to the world) and set state WANDER. When
+ * the species has a validTarget hook (frogs/storks), up to 8 candidates are drawn until one passes — if
+ * none do, the animal stays put (its current position is always its own valid zone).
+ */
 export function pickWanderTarget(sim: Sim, a: Agent, sp: AnimalSpecies): void {
   if (!a.data) a.data = {};
   const d = a.data;
-  const angle = agentRand(a.id, sim.stepCount, 0x7a11) * Math.PI * 2;
-  const dist = (0.3 + 0.7 * agentRand(a.id, sim.stepCount, 0x7a12)) * sp.wanderRadius;
-  const half = sim.world.size / 2 - 1;
-  d.tx = clampN(a.pos.x + Math.cos(angle) * dist, -half, half);
-  d.tz = clampN(a.pos.z + Math.sin(angle) * dist, -half, half);
   delete d.targetId;
+  delete d.corpseTarget; // a fresh wander drops any pending scavenging target
+  const half = sim.world.size / 2 - 1;
+  // Roost-anchored species (foxes/owls) draw their wander point around the roost — lazily captured on the
+  // first decision, which for seeded animals is t≈0 and for offspring is the birth spot near its parents.
+  let ax = a.pos.x;
+  let az = a.pos.z;
+  if (sp.roostAnchored) {
+    if (d.roostX === undefined) d.roostX = a.pos.x;
+    if (d.roostZ === undefined) d.roostZ = a.pos.z;
+    // Relocation: an animal that has moved far from its roost (e.g. chased prey to another patch and fed
+    // there) adopts its current position as the new home — otherwise it would waste energy walking back to
+    // an empty patch on every full-belly wander.
+    const dxr = a.pos.x - d.roostX;
+    const dzr = a.pos.z - d.roostZ;
+    if (dxr * dxr + dzr * dzr > 4 * sp.wanderRadius * sp.wanderRadius) {
+      d.roostX = a.pos.x;
+      d.roostZ = a.pos.z;
+    }
+    ax = d.roostX;
+    az = d.roostZ;
+  }
+  let tx: number | undefined;
+  let tz: number | undefined;
+  for (let i = 0; i < 8 && tx === undefined; i++) {
+    // Salted per attempt so the retries are independent draws, all pure in (id, step).
+    const angle = agentRand(a.id, sim.stepCount, 0x7a11 + i) * Math.PI * 2;
+    const dist = (0.3 + 0.7 * agentRand(a.id, sim.stepCount, 0x7b11 + i)) * sp.wanderRadius;
+    const cx = clampN(ax + Math.cos(angle) * dist, -half, half);
+    const cz = clampN(az + Math.sin(angle) * dist, -half, half);
+    if (sp.validTarget ? sp.validTarget(sim, cx, cz) : true) {
+      tx = cx;
+      tz = cz;
+    }
+  }
+  d.tx = tx ?? a.pos.x; // no valid candidate → stay put
+  d.tz = tz ?? a.pos.z;
   a.state = ANIMAL_STATE_WANDER;
 }
 

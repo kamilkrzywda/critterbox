@@ -65,6 +65,10 @@ export interface PlantSpecies extends Species {
   yieldAmount: number;
   /** Biome ids where this species seeds (see worldgen BIOME_*). */
   preferredBiomes: readonly number[];
+  /** Same-species exclusion radius for new seedlings in meters (carrying capacity, see base.ts canDropSeed).
+   *  Defaults to SEED_EXCLUDE_RADIUS; large-canopy species (trees) override with a bigger value so their
+   *  self-seeding spread stays bounded. */
+  seedExcludeRadius?: number;
 }
 
 // --- Plant stage machine states (RimWorld model) -------------------------------------------

@@ -14,3 +14,9 @@ import './animals/zajac';
 import './animals/chomik';
 import './animals/sarna';
 import './animals/owady';
+// Phase 5: frogs + the predator/scavenger layer (fox/stork/owl/crow)
+import './animals/zaba';
+import './animals/lis';
+import './animals/bocian';
+import './animals/sowa';
+import './animals/wrona';

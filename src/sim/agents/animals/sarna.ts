@@ -40,7 +40,7 @@ export const SARNA: AnimalSpecies = {
   maturityAge: 1500, // ~50 s juvenile phase at 1×
   breedEnergyFraction: 0.65,
   breedCooldownBase: 3600, // ÷ fertility → 4500–12000 ticks between fawns (lowest fertility; one offspring per event)
-  matingRange: 4,
+  matingRange: 8,
   wanderRadius: 30,
   popCap: 60,
   foodSpecies: ['reed', 'cranberry', 'tree'], // browser — trees included (browse, not kill)

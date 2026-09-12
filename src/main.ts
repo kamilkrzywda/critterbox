@@ -34,6 +34,12 @@ const ANIMAL_ROWS: PopRow[] = [
   { id: 'chomik', name: 'chomik' },
   { id: 'sarna', name: 'sarna' },
   { id: 'owady', name: 'owady' },
+  // Phase 5: frogs + the predator/scavenger layer
+  { id: 'zaba', name: 'żaba' },
+  { id: 'lis', name: 'lis' },
+  { id: 'bocian', name: 'bocian' },
+  { id: 'sowa', name: 'sowa' },
+  { id: 'wrona', name: 'wrona' },
 ];
 
 // --- renderer / scene -------------------------------------------------------------------

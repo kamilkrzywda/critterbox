@@ -14,6 +14,8 @@ interface CritterboxSim {
 }
 
 const ANIMALS = ['mysz', 'zajac', 'chomik', 'sarna', 'owady'];
+/** Phase 5: frogs + the predator/scavenger layer. */
+const PHASE5_ANIMALS = ['zaba', 'lis', 'bocian', 'sowa', 'wrona'];
 
 test('all five herbivore species present on load', async ({ page }) => {
   await page.goto('/');
@@ -58,4 +60,22 @@ test('sim runs unpaused and the total animal count changes', async ({ page }) =>
     }
   }
   expect(changed, `total animal count after running unpaused (started ${initial})`).toBeGreaterThan(-1);
+});
+
+test('Phase 5 species present on load: frog, fox, stork, owl, crow', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#scene')).toBeVisible();
+
+  const pops = await page.evaluate(() => {
+    return (window as unknown as { __critterbox: CritterboxSim }).__critterbox.populations;
+  });
+  for (const sp of PHASE5_ANIMALS) {
+    expect(pops[sp]?.count ?? 0, `${sp} count`).toBeGreaterThan(0);
+  }
+
+  // The population panel shows a live row per Phase 5 species.
+  const panel = page.locator('#population-panel');
+  for (const sp of PHASE5_ANIMALS) {
+    await expect(panel.locator(`.pop-row[data-species="${sp}"]`)).toBeVisible();
+  }
 });
