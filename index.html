@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Critterbox</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; }
+      canvas { display: block; }
+      #overlay {
+        position: fixed; top: 16px; left: 16px;
+        color: #fff; font-family: system-ui, sans-serif;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+        pointer-events: none; user-select: none;
+      }
+      #overlay h1 { margin: 0; font-size: 28px; }
+      #overlay p { margin: 4px 0 0; font-size: 14px; opacity: 0.9; }
+    </style>
+  </head>
+  <body>
+    <div id="overlay">
+      <h1 id="title">Critterbox</h1>
+      <p id="subtitle">scaffold v0.1.0</p>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
