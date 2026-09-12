@@ -2,7 +2,7 @@
  * Terrain rendering (Phase 1): builds a heightmap mesh from a generated World.
  * One vertex per cell, indexed triangles, computed normals, per-vertex biome colours
  * (Minecraft-ish palette; underwater floor desaturated). Water is one translucent plane at the
- * fixed water level spanning the world. Phase 2 replaces the static camera with free-flight.
+ * fixed water level spanning the world. Camera framing lives in render/camera.ts (Phase 2).
  */
 
 import * as THREE from 'three';
@@ -91,15 +91,4 @@ export function disposeTerrain(group: THREE.Object3D): void {
     else mat?.dispose();
   }
   group.removeFromParent();
-}
-
-/** Position the camera to view the whole world from an angle (~35° elevation, 45° azimuth). */
-export function frameCamera(camera: THREE.PerspectiveCamera, world: World): void {
-  const dist = world.size * 1.15;
-  const el = (35 * Math.PI) / 180; // elevation above the horizon
-  const az = (45 * Math.PI) / 180; // azimuth
-  camera.position.set(dist * Math.cos(az) * Math.cos(el), dist * Math.sin(el), dist * Math.sin(az) * Math.cos(el));
-  camera.far = Math.max(4000, world.size * 4);
-  camera.updateProjectionMatrix();
-  camera.lookAt(0, 0, 0);
 }

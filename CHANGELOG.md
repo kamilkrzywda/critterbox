@@ -2,6 +2,14 @@
 
 All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 
+## [0.3.0] - 2026-09-12
+
+### Added
+- Free-flight camera — WASD move, mouse-drag look (no pointer lock), arrow-key rotation as mouse replacement, Shift ×4 speed, wheel dolly
+- Space pause with PAUSED overlay indicator; sim steps gated while paused, rendering continues
+- `window.__critterbox` debug surface extended: live `camera {pos,yaw,pitch}` + `paused` / `setPaused(bool)`
+- Playwright e2e camera spec (movement, rotation, dolly, pause, input-focus key guard)
+
 ## [0.2.0] - 2026-09-12
 
 ### Added

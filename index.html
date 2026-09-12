@@ -34,13 +34,21 @@
       }
       #new-world-btn:hover { background: #568f46; }
       #world-info { margin: 8px 0 0; font-size: 12px; opacity: 0.85; }
+      #paused-overlay {
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        color: #fff; font-family: system-ui, sans-serif; font-size: 42px; font-weight: 700;
+        letter-spacing: 6px; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+        background: rgba(15, 20, 17, 0.45); padding: 10px 34px; border-radius: 10px;
+        pointer-events: none; user-select: none; display: none;
+      }
     </style>
   </head>
   <body>
     <div id="overlay">
       <h1 id="title">Critterbox</h1>
-      <p id="subtitle">v0.2.0 — procedural heightmap world</p>
+      <p id="subtitle">v0.3.0 — free-flight camera over a procedural world</p>
     </div>
+    <div id="paused-overlay">PAUSED</div>
     <div id="world-panel">
       <label for="size-slider">Size: <span id="size-label">300 m</span></label>
       <input type="range" id="size-slider" min="100" max="800" step="25" value="300" />
