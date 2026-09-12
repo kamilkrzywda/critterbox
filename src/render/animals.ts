@@ -18,6 +18,10 @@ type RGB = [number, number, number];
 /** Base palette per animal species id; unknown species fall back to a neutral brown. */
 const PALETTES: Record<string, RGB> = {
   mysz: [0.52, 0.45, 0.36], // grey-brown
+  zajac: [0.55, 0.42, 0.28], // medium brown hare
+  chomik: [0.72, 0.6, 0.42], // tan stocky hamster
+  sarna: [0.55, 0.33, 0.22], // large reddish-brown roe deer
+  owady: [0.16, 0.14, 0.12], // tiny dark speck (insect)
 };
 const FALLBACK: RGB = [0.5, 0.42, 0.3];
 /** Per-instance colour jitter amount (fraction of the base channel). */

@@ -2,7 +2,10 @@
  * Animal framework checks (Phase 4): run the REAL sim headlessly on generated worlds. Covers grazing
  * depletion + regrowth through a live mouse, breeding gates & inheritance (offspring bounds, sex ratio,
  * multi-generation trait drift), starvation/old-age death via the death hooks, the population cap, and
- * determinism (same seed+size → identical animal state after N steps).
+ * determinism (same seed+size → identical animal state after N steps for ALL five species).
+ * Part B adds: insect pollination boosting plant yield/growth vs an unvisited control, deer tree-browsing
+ * with regrowth (trees not killed by normal browsing), mice eating insects (prey removed + energy gained),
+ * and per-species determinism across mysz/zajac/chomik/sarna/owady.
  */
 
 export default {
@@ -201,16 +204,122 @@ export default {
     }
   },
 
-  /** Same seed+size → identical initial animal state AND identical per-animal state after N steps. */
+  /** An insect visiting a flowering plant boosts its yield/growth vs an unvisited control (deterministic). */
+  pollination(ctx) {
+    const Sim = ctx.sim.Sim;
+    const pollinatePlant = ctx.sim.pollinatePlant;
+    const world = flatMeadowWorld(50);
+
+    // --- growing plants: a visited one outgrows an unvisited control ---------------------------
+    const sim = new Sim(world);
+    const ctrl = sim.addAgent('grass', 10, 10);
+    ctrl.energy = 50; ctrl.state = 'growing';
+    const test = sim.addAgent('grass', -10, 10); // far away — no animals here, so no cross-interaction
+    test.energy = 50; test.state = 'growing';
+
+    ctx.check('animals: pollinatePlant applies the boost to a growing plant', pollinatePlant(sim, test) === true);
+    ctx.check('animals: an immediate second pollination is on cooldown', pollinatePlant(sim, test) === false);
+    const s2 = new Sim(world);
+    const seedling = s2.addAgent('grass', 0, 0); // addAgent starts at the seedling stage
+    ctx.check('animals: pollinating a seedling is refused (not flowering yet)', pollinatePlant(s2, seedling) === false);
+
+    for (let i = 0; i < 60; i++) sim.step();
+    ctx.check(`animals: the visited growing plant outgrows the control after 60 ticks (${test.energy.toFixed(1)} vs ${ctrl.energy.toFixed(1)})`, test.energy > ctrl.energy);
+
+    // --- fruiting plants: a pollinated one keeps setting fruit while an unvisited one holds -----
+    const sim3 = new Sim(world);
+    const fCtrl = sim3.addAgent('grass', 10, 10);
+    fCtrl.energy = 90; fCtrl.state = 'fruiting';
+    const fTest = sim3.addAgent('grass', -10, 10);
+    fTest.energy = 90; fTest.state = 'fruiting';
+    ctx.check('animals: pollinatePlant applies the boost to a fruiting plant', pollinatePlant(sim3, fTest) === true);
+
+    for (let i = 0; i < 60; i++) sim3.step();
+    ctx.check(`animals: the visited fruiting plant gains yield while the control holds (${fTest.energy.toFixed(1)} vs ${fCtrl.energy.toFixed(1)})`, fTest.energy > fCtrl.energy);
+  },
+
+  /** A deer browsing a tree depletes it into regrowth; left alone, the tree recovers — not killed. */
+  deerBrowse(ctx) {
+    const Sim = ctx.sim.Sim;
+    const SARNA = ctx.sim.sarna;
+    const world = flatForestWorld(50); // forest biome → fertility 1.0
+
+    const sim = new Sim(world);
+    const tree = sim.addAgent('tree', 10, 10);
+    tree.energy = 400; // full canopy (addAgent starts at the seedling fraction)
+    tree.state = 'fruiting';
+
+    const deer = sim.addAgent('sarna', 10.5, 10); // within eatRange (1.5) of the tree
+    deer.sex = 'f';
+    deer.traits = midTraits(SARNA);
+    deer.energy = 200; // hungry → forages from the first decision tick
+
+    let regrowthAt = -1;
+    for (let i = 0; i < 200 && tree.state !== 'regrowth'; i++) {
+      sim.step();
+      if (!sim.agents.includes(tree)) break; // browsing must not kill the tree in this session
+      if (tree.state === 'regrowth') regrowthAt = i + 1;
+    }
+    ctx.check(`animals: deer browsing depletes the tree into regrowth (${regrowthAt} ticks, energy ${tree.energy.toFixed(0)}/400)`, regrowthAt > 0 && sim.agents.includes(tree) && tree.energy < 280);
+
+    // The browser leaves (removed so it cannot re-browse during recovery); the tree must recover.
+    sim.killAgent(deer);
+    let recovered = false;
+    for (let i = 0; i < 1500; i++) {
+      sim.step();
+      if (!sim.agents.includes(tree)) break;
+      if (tree.state === 'fruiting') { recovered = true; break; }
+    }
+    ctx.check('animals: the browsed tree regrows and recovers yield (back to fruiting)', recovered && tree.energy >= 280);
+    ctx.check('animals: normal browsing did not kill the tree', sim.agents.includes(tree));
+  },
+
+  /** A mouse feeding on an insect gains energy and the insect is removed (prey death hook fires). */
+  miceEatInsects(ctx) {
+    const Sim = ctx.sim.Sim;
+    const MYSZ = ctx.sim.mysz;
+    const OWADY = ctx.sim.owady;
+    const world = flatMeadowWorld(50); // no plants → the insect is the only food
+
+    const sim = new Sim(world);
+    let preyDeathSeen = null;
+    const unsub = ctx.sim.animals.registerAnimalDeathHook((a) => { if (a.species === 'owady') preyDeathSeen = a.id; });
+
+    const bug = sim.addAgent('owady', 10, 10);
+    bug.sex = 'm';
+    bug.traits = midTraits(OWADY);
+    bug.energy = 25;
+
+    const mouse = sim.addAgent('mysz', 10.3, 10); // within eatRange (1.0) of the insect
+    mouse.sex = 'f';
+    mouse.traits = midTraits(MYSZ);
+    mouse.energy = 20; // hungry → forages from the first decision tick
+
+    const energyBefore = mouse.energy;
+    let eatenAt = -1;
+    for (let i = 0; i < 60 && sim.agents.includes(bug); i++) {
+      sim.step();
+      if (!sim.agents.includes(bug)) { eatenAt = i + 1; break; }
+    }
+    unsub();
+    ctx.check(`animals: a mouse feeding on an insect removes it (${eatenAt} ticks)`, eatenAt > 0);
+    ctx.check('animals: the prey death hook fired for the eaten insect', preyDeathSeen === bug.id);
+    ctx.check(`animals: the mouse gained energy from the insect (${energyBefore.toFixed(1)} → ${mouse.energy.toFixed(1)})`, mouse.energy > energyBefore + 5);
+    ctx.check('animals: population counts reflect the predation (owady at 0)', (sim.popCounts.get('owady') ?? 0) === 0);
+  },
+
+  /** Same seed+size → identical initial animal state AND identical per-animal state after N steps,
+   * for ALL five species (positions/energy/traits/sex). */
   determinism(ctx) {
     const { generateWorld } = ctx.worldgen;
     const Sim = ctx.sim.Sim;
     const seedLife = ctx.sim.seedLife;
+    const ANIMALS = ['mysz', 'zajac', 'chomik', 'sarna', 'owady'];
 
     function animalSig(sim) {
       return sim.agents
-        .filter((a) => a.species === 'mysz')
-        .map((a) => `${a.id}:${a.sex}:${a.pos.x.toFixed(4)},${a.pos.z.toFixed(4)}:${a.energy.toFixed(6)}:${a.state}:${JSON.stringify(a.traits)}`)
+        .filter((a) => ANIMALS.includes(a.species))
+        .map((a) => `${a.id}:${a.species}:${a.sex}:${a.pos.x.toFixed(4)},${a.pos.z.toFixed(4)}:${a.energy.toFixed(6)}:${a.state}:${JSON.stringify(a.traits)}`)
         .join('|');
     }
 
@@ -221,8 +330,18 @@ export default {
     seedLife(b);
 
     ctx.check('animals: same seed+size → identical initial animal state (positions/energy/traits/sex)', animalSig(a) === animalSig(b));
+    for (const sp of ANIMALS) {
+      const n = a.agents.filter((x) => x.species === sp).length;
+      ctx.check(`animals: default world seeds ${sp} (${n})`, n > 0);
+    }
+
     for (let i = 0; i < STEPS; i++) { a.step(); b.step(); }
-    ctx.check(`animals: identical per-animal state after ${STEPS} steps`, animalSig(a) === animalSig(b));
+    ctx.check(`animals: identical per-animal state after ${STEPS} steps (all five species)`, animalSig(a) === animalSig(b));
+    for (const sp of ANIMALS) {
+      const ca = a.agents.filter((x) => x.species === sp).length;
+      const cb = b.agents.filter((x) => x.species === sp).length;
+      ctx.check(`animals: ${sp} count identical after ${STEPS} steps (${ca})`, ca === cb);
+    }
 
     const c = new Sim(generateWorld({ seed: SEED + 1, size: SIZE }));
     seedLife(c);
@@ -248,11 +367,29 @@ function flatMeadowWorld(size) {
   };
 }
 
+/** A flat, fully-forest synthetic world for tree-browsing tests (fertility 1.0). */
+function flatForestWorld(size) {
+  const n = size * size;
+  const heights = new Float32Array(n).fill(10); // well above the fixed water level (8 m)
+  const biomes = new Uint8Array(n).fill(3); // BIOME_FOREST
+  return {
+    seed: 7,
+    size,
+    width: size,
+    depth: size,
+    heights,
+    biomes,
+    waterLevel: 8,
+    heightAt() { return 10; },
+    biomeAt() { return 3; }, // forest → fertility 1.0
+  };
+}
+
 /** All traits at their midpoint — deterministic parents for inheritance math. */
-function midTraits(MYSZ) {
+function midTraits(sp) {
   const t = {};
-  for (const k of Object.keys(MYSZ.traits)) {
-    const d = MYSZ.traits[k];
+  for (const k of Object.keys(sp.traits)) {
+    const d = sp.traits[k];
     t[k] = (d.min + d.max) / 2;
   }
   return t;

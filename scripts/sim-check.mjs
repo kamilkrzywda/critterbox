@@ -37,6 +37,10 @@ const SOURCES = [
   'src/sim/agents/plants/tree.ts',
   'src/sim/agents/animals/base.ts',
   'src/sim/agents/animals/mysz.ts',
+  'src/sim/agents/animals/zajac.ts',
+  'src/sim/agents/animals/chomik.ts',
+  'src/sim/agents/animals/sarna.ts',
+  'src/sim/agents/animals/owady.ts',
   'src/sim/agents/index.ts',
   'src/sim/sim.ts',
   'src/sim/seedLife.ts',
@@ -101,6 +105,10 @@ try {
     const seedLifeMod = tmpRequire('./sim/seedLife.js');
     const animalsBaseMod = tmpRequire('./sim/agents/animals/base.js');
     const myszMod = tmpRequire('./sim/agents/animals/mysz.js');
+    const zajacMod = tmpRequire('./sim/agents/animals/zajac.js');
+    const chomikMod = tmpRequire('./sim/agents/animals/chomik.js');
+    const sarnaMod = tmpRequire('./sim/agents/animals/sarna.js');
+    const owadyMod = tmpRequire('./sim/agents/animals/owady.js');
 
     const ctxExtra = {
       worldgen: worldgenMod,
@@ -114,9 +122,14 @@ try {
         energy: energyMod,
         Sim: simCoreMod.Sim,
         grazePlant: simCoreMod.grazePlant,
+        pollinatePlant: simCoreMod.pollinatePlant,
         seedLife: seedLifeMod.seedLife,
         animals: animalsBaseMod, // shared animal framework (updateAnimal/tryBreed/hooks)
         mysz: myszMod.MYSZ, // the mouse species table (trait bounds for assertions)
+        zajac: zajacMod.ZAJAC,
+        chomik: chomikMod.CHOMIK,
+        sarna: sarnaMod.SARNA,
+        owady: owadyMod.OWADY,
       },
     };
 

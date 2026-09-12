@@ -10,3 +10,7 @@ import './plants/cranberry';
 import './plants/reed';
 import './plants/tree';
 import './animals/mysz';
+import './animals/zajac';
+import './animals/chomik';
+import './animals/sarna';
+import './animals/owady';

@@ -30,6 +30,10 @@ const PLANT_ROWS: PopRow[] = [
 ];
 const ANIMAL_ROWS: PopRow[] = [
   { id: 'mysz', name: 'mysz' },
+  { id: 'zajac', name: 'zając' },
+  { id: 'chomik', name: 'chomik' },
+  { id: 'sarna', name: 'sarna' },
+  { id: 'owady', name: 'owady' },
 ];
 
 // --- renderer / scene -------------------------------------------------------------------

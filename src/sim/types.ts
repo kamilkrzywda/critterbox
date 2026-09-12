@@ -1,9 +1,10 @@
 /**
  * Base agent schema + species tables (PLAN "Life simulation / Agent model"). Plain objects and plain
  * behaviour tables — no ECS, no class hierarchy (Sandfall pattern). This module is pure TS: it defines
- * shapes only, so it compiles & runs headlessly. `sex`/`traits`/`data` are the animal fields used from
- * Phase 4; plants don't need them. `variant` is a small plant-specific extension used by trees (the
- * birch/oak/pine form chosen by biome at seeding).
+ * shapes only, so it compiles & runs headlessly. `sex`/`traits` are the animal fields used from Phase 4;
+ * `data` is shared per-entity memory (animal behaviour state + plant pollination state); plants don't use
+ * sex/traits. `variant` is a small plant-specific extension used by trees (the birch/oak/pine form chosen
+ * by biome at seeding).
  */
 
 /** Sex — set at birth (50/50 via agentRand); breeding requires opposite-sex pairs. */
@@ -31,7 +32,8 @@ export interface Agent {
   state: string;
   sex?: Sex; // animals only — set at birth, 50/50 via agentRand
   traits?: Record<string, number>; // animals only — heritable numeric traits (mean of parents + mutation)
-  /** Animal per-entity memory (JSON-safe numbers): lastBreedStep, behaviour target coords. */
+  /** Per-entity memory (JSON-safe numbers). Animals: lastBreedStep, behaviour target coords. Plants:
+   * pollination state (lastPollinateStep, pollinatedUntil — see sim.pollinatePlant). */
   data?: Record<string, number>;
   variant?: number; // tree form chosen by biome at seeding: 0 birch, 1 oak, 2 pine
 }

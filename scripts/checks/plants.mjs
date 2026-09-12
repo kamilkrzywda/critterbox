@@ -96,15 +96,18 @@ export default {
     const stats = seedLife(sim);
     const pops = sim.populations();
 
-    for (const sp of ['grass', 'clover', 'cranberry', 'reed', 'tree']) {
+    const PLANTS = ['grass', 'clover', 'cranberry', 'reed', 'tree'];
+    for (const sp of PLANTS) {
       ctx.check(`plants: default world seeds ${sp} (${pops[sp]?.count ?? 0})`, (pops[sp]?.count ?? 0) > 0);
     }
     ctx.check('plants: total population is in the few-thousand–20k target band', stats.total >= 1000 && stats.total <= 25000);
 
-    // After a short run, populations only shrink (no reproduction yet) and stay sane.
+    // After a short run, PLANT populations only shrink (plants don't reproduce; animals may breed — Phase 4).
+    const initialPlantTotal = PLANTS.reduce((s, sp) => s + (stats.perSpecies[sp] ?? 0), 0);
     for (let i = 0; i < 60; i++) sim.step();
     const after = sim.populations();
-    ctx.check('plants: population does not grow without reproduction', sim.agents.length <= stats.total);
+    const plantTotal = PLANTS.reduce((s, sp) => s + (after[sp]?.count ?? 0), 0);
+    ctx.check(`plants: plant population does not grow without reproduction (${plantTotal} ≤ ${initialPlantTotal})`, plantTotal <= initialPlantTotal);
     ctx.check('plants: grass still present after a short run', (after.grass?.count ?? 0) > 0);
   },
 };

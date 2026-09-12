@@ -2,7 +2,12 @@
 
 All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 
-## [Unreleased]
+## [0.5.0] - 2026-09-12
+
+### Added
+- Herbivores — mysz/zając/chomik/sarna + owady pollinators complete the food chain base: per-species energy budgets, grazing behavior with plant regrowth incl. deer tree-browsing (trees recover, not killed by normal browsing), insect pollination boosting plant yield/growth (per-plant cooldown), mice eat insects
+- Sexes, breeding gates (maturity/energy/cooldown/pop-cap) and simplified trait inheritance with mutation on birth for all five species; deterministic per-biome seeding (~60 mysz, ~24 zając, ~18 chomik, ~8 sarna, ~250 owady clusters on the default 300×300 world)
+- Animal instanced rendering (per-species palette: hare medium brown, hamster tan stocky, deer large reddish-brown, insect tiny dark speck); population panel extended with a row per animal species
 
 ### Fixed
 - Terrain mesh — restored missing triangle per heightmap cell (the second quad triangle was split along the wrong diagonal, leaving a triangular hole in every land cell); added headless geometry regression check (`scripts/checks/terrain.mjs`)

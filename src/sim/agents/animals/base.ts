@@ -20,6 +20,11 @@
  * work spreads across ticks; between decisions an animal just walks toward its stored target
  * (data.tx/tz). ALL randomness goes through agentRand/agentGaussian(id, stepSeed) — deterministic and
  * independent of processing order.
+ *
+ * Part B hooks: a species may override `decide` (insects pollinate instead of grazing), supply a
+ * `feedOnTarget` action (nectar visits), or list `preySpecies` — arriving at an animal target kills it
+ * via Sim.killAgent and digests its energy. attemptMate/pickWanderTarget/canAttemptBreed are exported
+ * so custom decides reuse the exact same breeding/wander logic as the generic one.
  */
 
 import { agentGaussian, agentRand } from '../../rng';
@@ -85,8 +90,15 @@ export interface AnimalSpecies extends Species {
   popCap: number;
   /** Plant species ids this animal eats. */
   foodSpecies: readonly string[];
+  /** Animal species ids this animal preys on (Phase 4 Part B: mice eat insects); prey are killed when fed upon. */
+  preySpecies?: readonly string[];
   /** Body box dimensions in meters at size trait = 1 (rendering). */
   bodySize: [number, number, number];
+  /** Optional species-specific decision override (insects pollinate instead of grazing). When set, replaces the generic decide(). */
+  decide?: (sim: Sim, a: Agent, sp: AnimalSpecies) => void;
+  /** Optional species-specific feeding action when arriving at the target plant. Returns energy gained
+   *  (0 = nothing eaten → the animal re-decides on its next cycle). Default path grazes via grazePlant. */
+  feedOnTarget?: (sim: Sim, a: Agent, sp: AnimalSpecies, target: Agent) => number;
 }
 
 /** Energy capacity of an agent: the 0–100 scale × its size trait. */
@@ -112,7 +124,8 @@ export function registerAnimalDeathHook(hook: AnimalDeathHook): () => void {
   };
 }
 
-function notifyDeath(a: Agent): void {
+/** Fire the registered death hooks for a dying animal (starvation, old age, or predation via Sim.killAgent). */
+export function notifyAnimalDeath(a: Agent): void {
   for (const h of deathHooks) h(a);
 }
 
@@ -219,11 +232,11 @@ export function updateAnimal(sim: Sim, a: Agent): boolean {
   // --- age + vital death (checked first: last tick's drain/movement may have emptied the store) ---
   a.age += 1;
   if (a.energy <= 0) {
-    notifyDeath(a);
+    notifyAnimalDeath(a);
     return false; // starvation
   }
   if (a.age > (t.lifespan ?? as_.maturityAge * 20)) {
-    notifyDeath(a);
+    notifyAnimalDeath(a);
     return false; // old age
   }
 
@@ -250,9 +263,20 @@ export function updateAnimal(sim: Sim, a: Agent): boolean {
         delete mem.targetId;
         a.state = ANIMAL_STATE_IDLE;
       } else if (d2 <= as_.eatRange * as_.eatRange) {
-        // Eat one bite, then stop foraging until the next decision re-evaluates hunger.
-        const removed = grazePlant(plant, as_.eatAmount);
-        if (removed > 0) a.energy = clampEnergy(a.energy + removed * as_.digestionEfficiency, animalEnergyMax(a));
+        // Arrived at the target: feed on it, then stop foraging until the next decision re-evaluates hunger.
+        let gained = 0;
+        const targetSp = getSpecies(plant.species);
+        if (targetSp?.kind === 'animal') {
+          // Predation (Phase 4 Part B): the prey is killed and its energy digested.
+          sim.killAgent(plant);
+          gained = plant.energy * as_.digestionEfficiency;
+        } else if (as_.feedOnTarget) {
+          gained = as_.feedOnTarget(sim, a, as_, plant); // e.g. insects take nectar + pollinate
+        } else {
+          const removed = grazePlant(plant, as_.eatAmount);
+          if (removed > 0) gained = removed * as_.digestionEfficiency;
+        }
+        if (gained > 0) a.energy = clampEnergy(a.energy + gained, animalEnergyMax(a));
         delete mem.tx;
         delete mem.tz;
         delete mem.targetId;
@@ -271,18 +295,26 @@ export function updateAnimal(sim: Sim, a: Agent): boolean {
 
 /** Pick the animal's next goal on its decision tick: food when hungry, otherwise breeding or wander. */
 function decide(sim: Sim, a: Agent, sp: AnimalSpecies): void {
+  if (sp.decide) {
+    sp.decide(sim, a, sp); // species-specific behaviour (insects pollinate instead of grazing)
+    return;
+  }
   if (!a.data) a.data = {};
   const d = a.data;
 
-  // 1) Hungry → seek the nearest edible plant within sense radius (grid query + exact distance test).
+  // 1) Hungry → seek the nearest edible plant or prey animal within sense radius.
   if (a.energy / animalEnergyMax(a) < sp.hungerThreshold) {
     let best: Agent | null = null;
     let bestD2 = Infinity;
     for (const id of sim.grid.query(a.pos.x, a.pos.z, sp.senseRadius)) {
       const p = sim.agentById(id);
-      if (!p || p.energy <= 0) continue;
+      if (!p || p.id === a.id || p.energy <= 0) continue; // self is never food
       const ps = getSpecies(p.species);
-      if (!ps || ps.kind !== 'plant' || !sp.foodSpecies.includes(p.species)) continue;
+      if (!ps) continue;
+      let edible: boolean;
+      if (ps.kind === 'plant') edible = sp.foodSpecies.includes(p.species);
+      else edible = sp.preySpecies?.includes(p.species) ?? false; // prey animal (mice eat insects)
+      if (!edible) continue;
       const dx = p.pos.x - a.pos.x;
       const dz = p.pos.z - a.pos.z;
       const dist2 = dx * dx + dz * dz;
@@ -301,22 +333,33 @@ function decide(sim: Sim, a: Agent, sp: AnimalSpecies): void {
   }
 
   // 2) Not hungry → try to breed with an opposite-sex partner in range.
-  if (canAttemptBreed(sim, a, sp)) {
-    for (const id of sim.grid.query(a.pos.x, a.pos.z, sp.matingRange)) {
-      const p = sim.agentById(id);
-      if (!p || p.id === a.id || p.species !== a.species) continue;
-      if (p.sex === a.sex) continue; // opposite sex required
-      const dx = p.pos.x - a.pos.x;
-      const dz = p.pos.z - a.pos.z;
-      if (dx * dx + dz * dz > sp.matingRange * sp.matingRange) continue;
-      if (tryBreed(sim, a, p, sp)) {
-        a.state = ANIMAL_STATE_MATE;
-        return;
-      }
-    }
+  if (canAttemptBreed(sim, a, sp) && attemptMate(sim, a, sp)) {
+    a.state = ANIMAL_STATE_MATE;
+    return;
   }
 
   // 3) Otherwise wander to a fresh random point.
+  pickWanderTarget(sim, a, sp);
+}
+
+/** Search for an opposite-sex partner within matingRange and try to breed with the first eligible one. */
+export function attemptMate(sim: Sim, a: Agent, sp: AnimalSpecies): boolean {
+  for (const id of sim.grid.query(a.pos.x, a.pos.z, sp.matingRange)) {
+    const p = sim.agentById(id);
+    if (!p || p.id === a.id || p.species !== a.species) continue;
+    if (p.sex === a.sex) continue; // opposite sex required
+    const dx = p.pos.x - a.pos.x;
+    const dz = p.pos.z - a.pos.z;
+    if (dx * dx + dz * dz > sp.matingRange * sp.matingRange) continue;
+    if (tryBreed(sim, a, p, sp)) return true;
+  }
+  return false;
+}
+
+/** Pick a fresh random wander point within wanderRadius (clamped to the world) and set state WANDER. */
+export function pickWanderTarget(sim: Sim, a: Agent, sp: AnimalSpecies): void {
+  if (!a.data) a.data = {};
+  const d = a.data;
   const angle = agentRand(a.id, sim.stepCount, 0x7a11) * Math.PI * 2;
   const dist = (0.3 + 0.7 * agentRand(a.id, sim.stepCount, 0x7a12)) * sp.wanderRadius;
   const half = sim.world.size / 2 - 1;
@@ -327,7 +370,7 @@ function decide(sim: Sim, a: Agent, sp: AnimalSpecies): void {
 }
 
 /** Cheap pre-gates before spending a grid query on partner search. */
-function canAttemptBreed(sim: Sim, a: Agent, sp: AnimalSpecies): boolean {
+export function canAttemptBreed(sim: Sim, a: Agent, sp: AnimalSpecies): boolean {
   if (a.age <= sp.maturityAge) return false;
   if (a.energy < sp.breedEnergyFraction * animalEnergyMax(a)) return false;
   if (inCooldown(sim, a, sp)) return false;
