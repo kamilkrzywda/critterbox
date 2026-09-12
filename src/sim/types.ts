@@ -32,8 +32,9 @@ export interface Agent {
   state: string;
   sex?: Sex; // animals only — set at birth, 50/50 via agentRand
   traits?: Record<string, number>; // animals only — heritable numeric traits (mean of parents + mutation)
-  /** Per-entity memory (JSON-safe numbers). Animals: lastBreedStep, behaviour target coords. Plants:
-   * pollination state (lastPollinateStep, pollinatedUntil — see sim.pollinatePlant). */
+  /** Per-entity memory (JSON-safe numbers). Animals: lastBreedStep, behaviour target coords, heading
+   * (radians — direction of the last actual movement, kept while idle; see animals/base.ts moveToward).
+   * Plants: pollination state (lastPollinateStep, pollinatedUntil — see sim.pollinatePlant). */
   data?: Record<string, number>;
   variant?: number; // tree form chosen by biome at seeding: 0 birch, 1 oak, 2 pine
 }

@@ -308,6 +308,61 @@ export default {
     ctx.check('animals: population counts reflect the predation (insect at 0)', (sim.popCounts.get('insect') ?? 0) === 0);
   },
 
+  /** After N steps every moved animal's stored heading matches its actual last displacement direction —
+   * the renderer turns instances by this value (render/animals.ts), so a stale or wrong heading reads as
+   * animals facing sideways/backwards. Well-fed mice on an empty meadow wander only, changing direction
+   * every decision tick, which exercises both "heading follows movement" and "kept while idle". */
+  heading(ctx) {
+    const Sim = ctx.sim.Sim;
+    const MOUSE = ctx.sim.mouse;
+    const world = flatMeadowWorld(50);
+
+    const sim = new Sim(world);
+    const animals = [];
+    for (let i = 0; i < 6; i++) {
+      const a = sim.addAgent('mouse', -10 + i * 4, 5);
+      a.sex = i % 2 === 0 ? 'f' : 'm';
+      a.traits = midTraits(MOUSE);
+      a.energy = 95; // above the hunger gate → pure wander (age < maturityAge blocks breeding)
+      animals.push(a);
+    }
+
+    const lastMove = new Map(); // id -> {dx, dz} of the most recent tick the animal actually moved
+    let movingTicks = 0;
+    for (let i = 0; i < 120; i++) {
+      const before = new Map(animals.map((a) => [a.id, { x: a.pos.x, z: a.pos.z }]));
+      sim.step();
+      for (const a of animals) {
+        if (!sim.agents.includes(a)) continue; // can't happen at this energy in 120 ticks — be safe anyway
+        const b = before.get(a.id);
+        const dx = a.pos.x - b.x;
+        const dz = a.pos.z - b.z;
+        if (dx * dx + dz * dz > 1e-6) {
+          lastMove.set(a.id, { dx, dz });
+          movingTicks++;
+        }
+      }
+    }
+
+    ctx.check(`heading: animals actually moved during the run (${movingTicks} moving ticks over ${animals.length} mice)`, movingTicks >= 50);
+
+    let checked = 0;
+    let maxErr = 0;
+    for (const a of animals) {
+      const mv = lastMove.get(a.id);
+      if (!mv || a.data?.heading === undefined) continue; // never moved → nothing to verify
+      const moveAng = Math.atan2(mv.dz, mv.dx);
+      const err = Math.abs(normAngle(a.data.heading - moveAng));
+      maxErr = Math.max(maxErr, err);
+      if (err >= 0.2) {
+        ctx.check(`heading: mouse ${a.id} heading ${a.data.heading.toFixed(3)} vs last movement direction ${moveAng.toFixed(3)} rad`, false);
+        return; // report the first offender and stop
+      }
+      checked++;
+    }
+    ctx.check(`heading: every moved animal's heading matches its last displacement (n=${checked}, max err ${maxErr.toFixed(4)} rad < 0.2)`, checked >= 4 && maxErr < 0.2);
+  },
+
   /** Same seed+size → identical initial animal state AND identical per-animal state after N steps,
    * for ALL five species (positions/energy/traits/sex). */
   determinism(ctx) {
@@ -393,6 +448,13 @@ function midTraits(sp) {
     t[k] = (d.min + d.max) / 2;
   }
   return t;
+}
+
+/** Wrap an angle difference into [−π, π]. */
+function normAngle(a) {
+  while (a > Math.PI) a -= 2 * Math.PI;
+  while (a < -Math.PI) a += 2 * Math.PI;
+  return a;
 }
 
 /** A mature, well-fed opposite-sex pair at (x,z)/(x+1,z). */

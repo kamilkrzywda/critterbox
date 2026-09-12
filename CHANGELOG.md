@@ -4,6 +4,9 @@ All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Added
+- Animals rotate toward their movement direction: a per-animal heading (radians) is tracked in the sim on every move (`data.heading`, kept while idle so animals don't snap to zero), and the animal renderer applies it as instance yaw (+Z is the geometry's front axis — the bodySize depth dimension); new headless check asserts the heading tracks actual displacement
+
 ### Changed
 - All animal species renamed to English across code and docs: mouse, hare, hamster, deer, insect, frog, fox, stork, owl, crow (species files, registry ids, palettes, population-panel labels, e2e specs, headless checks, PLAN.md roster and this changelog)
 

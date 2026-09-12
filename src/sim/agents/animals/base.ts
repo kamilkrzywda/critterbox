@@ -19,8 +19,10 @@
  * Behaviour state machine (Agent.state): idle/wander → seekFood → eat → mate. Decisions are sampled
  * every DECISION_EVERY ticks, staggered by agent id ((stepCount + id) % DECISION_EVERY === 0), so the
  * work spreads across ticks; between decisions an animal just walks toward its stored target
- * (data.tx/tz). ALL randomness goes through agentRand/agentGaussian(id, stepSeed) — deterministic and
- * independent of processing order.
+ * (data.tx/tz). The movement direction is tracked as data.heading (radians, atan2(dz,dx) of the last
+ * actual displacement — kept while idle) so the renderer can turn each instance where it's going. ALL
+ * randomness goes through agentRand/agentGaussian(id, stepSeed) — deterministic and independent of
+ * processing order.
  *
  * Part B hooks: a species may override `decide` (insects pollinate instead of grazing), supply a
  * `feedOnTarget` action (nectar visits), or list `preySpecies` — arriving at an animal target kills it
@@ -614,10 +616,15 @@ export function canAttemptBreed(sim: Sim, a: Agent, sp: AnimalSpecies): boolean 
   return true;
 }
 
-/** Walk toward (tx,tz) at the species speed × speed trait, paying movement cost per meter. */
+/** Walk toward (tx,tz) at the species speed × speed trait, paying movement cost per meter. Whenever the
+ *  animal actually moves, its heading is updated from the ACTUAL (post-clamp) displacement: data.heading =
+ *  atan2(dz, dx) in radians on the x/z plane. While idle the last heading is kept — animals never snap to
+ *  zero. render/animals.ts turns each instance by this value (+Z is the geometry's front axis). */
 function moveToward(sim: Sim, a: Agent, sp: AnimalSpecies, t: Record<string, number>, dx: number, dz: number, d2: number): void {
   const dist = Math.sqrt(d2);
   const stepLen = Math.min(sp.baseSpeed * (t.speed ?? 1), dist);
+  const px = a.pos.x;
+  const pz = a.pos.z;
   a.pos.x += (dx / dist) * stepLen;
   a.pos.z += (dz / dist) * stepLen;
 
@@ -628,6 +635,14 @@ function moveToward(sim: Sim, a: Agent, sp: AnimalSpecies, t: Record<string, num
   if (a.pos.z < -half) a.pos.z = -half;
   else if (a.pos.z > half) a.pos.z = half;
   a.pos.y = sim.world.heightAt(a.pos.x, a.pos.z);
+
+  // Heading: the actual displacement direction — only when it really moved (clamping can zero out a step).
+  const mx = a.pos.x - px;
+  const mz = a.pos.z - pz;
+  if (mx * mx + mz * mz > 0) {
+    if (!a.data) a.data = {};
+    a.data.heading = Math.atan2(mz, mx);
+  }
 
   a.energy -= sp.moveCostPerMeter * stepLen; // movement cost per meter moved
 }

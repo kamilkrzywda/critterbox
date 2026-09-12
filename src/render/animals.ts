@@ -1,8 +1,9 @@
 /**
  * Instanced animal rendering (Phase 4): one InstancedMesh per registered ANIMAL species — procedural
  * box geometry sized by the species' bodySize (world-space meters at the mid size trait), per-instance
- * scale from visualScale() (size trait mapped onto a ±25% band around it — see base.ts), deterministic
- * colour jitter from agent id + species palette. Animal counts are low hundreds, so every live
+ * scale from visualScale() (size trait mapped onto a ±25% band around it — see base.ts), yaw from the
+ * sim-tracked movement heading (data.heading — animals face where they're going; +Z is the front axis,
+ * see writeMatrix), deterministic colour jitter from agent id + species palette. Animal counts are low hundreds, so every live
  * instance's matrix is rewritten each frame (no dirty-set needed at this scale; colours upload only on
  * population change). Generic over the registry: a new animal species module auto-appears here once
  * registered — its palette falls back to a neutral brown until added to PALETTES.
@@ -134,13 +135,20 @@ export class AnimalRenderer {
     this.group.add(sr.mesh);
   }
 
-  /** Compose one instance's matrix: position on terrain × fixed per-id yaw × visual-scale. The size trait is
-   *  mapped through visualScale (full trait range → ±25% around the species' bodySize in meters) — never a
-   *  raw multiplier, so no individual can render at several-meters scale regardless of trait drift. */
+  /** Compose one instance's matrix: position on terrain × yaw from the sim-tracked movement heading ×
+   *  visual-scale. The geometry's FRONT axis is +Z — bodySize's depth dimension, the longest horizontal
+   *  extent for every species (see each species' bodySize comment), so an unrotated box "faces" +Z. The sim
+   *  stores each animal's heading as atan2(dz, dx) of its last actual displacement (data.heading, base.ts
+   *  moveToward; kept while idle); yaw = π/2 − heading maps that direction onto the local +Z axis (a three.js
+   *  Y-rotation sends +Z to (sin θ, cos θ)). Animals that never moved keep a fixed per-id orientation so the
+   *  scene doesn't read as one aligned grid. The size trait is mapped through visualScale (full trait range →
+   *  ±25% around the species' bodySize in meters) — never a raw multiplier, so no individual can render at
+   *  several-meters scale regardless of trait drift. */
   private writeMatrix(sr: SpeciesRender, slot: number, a: Agent): void {
     const s = visualScale(sr.sp, a.traits?.size ?? (sr.sp.traits.size.min + sr.sp.traits.size.max) / 2);
     this.tmpPos.set(a.pos.x, a.pos.y, a.pos.z);
-    this.tmpEuler.set(0, agentRand(a.id, 0x7a11) * Math.PI * 2, 0); // fixed heading per animal (no velocity stored)
+    const heading = a.data?.heading ?? agentRand(a.id, 0x7a11) * Math.PI * 2; // unmoved animals keep a fixed per-id orientation
+    this.tmpEuler.set(0, Math.PI / 2 - heading, 0);
     this.tmpQuat.setFromEuler(this.tmpEuler);
     this.tmpScale.set(s, s, s);
     this.tmpMat.compose(this.tmpPos, this.tmpQuat, this.tmpScale);
