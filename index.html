@@ -15,12 +15,41 @@
       }
       #overlay h1 { margin: 0; font-size: 28px; }
       #overlay p { margin: 4px 0 0; font-size: 14px; opacity: 0.9; }
+      #world-panel {
+        position: fixed; top: 16px; right: 16px; width: 230px;
+        color: #fff; font-family: system-ui, sans-serif; font-size: 13px;
+        background: rgba(20, 28, 24, 0.75); border-radius: 8px; padding: 12px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); user-select: none;
+      }
+      #world-panel label { display: block; margin-bottom: 8px; }
+      #world-panel input[type="range"] { width: 100%; }
+      #world-panel input[type="text"] {
+        width: 120px; box-sizing: border-box; padding: 3px 6px;
+        font-family: inherit; font-size: 13px;
+      }
+      #world-panel .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+      #new-world-btn {
+        width: 100%; padding: 6px 0; font-family: inherit; font-size: 13px;
+        background: #4a7d3c; color: #fff; border: none; border-radius: 5px; cursor: pointer;
+      }
+      #new-world-btn:hover { background: #568f46; }
+      #world-info { margin: 8px 0 0; font-size: 12px; opacity: 0.85; }
     </style>
   </head>
   <body>
     <div id="overlay">
       <h1 id="title">Critterbox</h1>
-      <p id="subtitle">scaffold v0.1.0</p>
+      <p id="subtitle">v0.2.0 — procedural heightmap world</p>
+    </div>
+    <div id="world-panel">
+      <label for="size-slider">Size: <span id="size-label">300 m</span></label>
+      <input type="range" id="size-slider" min="100" max="800" step="25" value="300" />
+      <div class="row">
+        <label for="seed-input">Seed:</label>
+        <input type="text" id="seed-input" value="1337" spellcheck="false" />
+      </div>
+      <button id="new-world-btn">New World</button>
+      <p id="world-info">seed 1337 · 300 m</p>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
