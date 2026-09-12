@@ -1,6 +1,7 @@
 /**
  * Instanced animal rendering (Phase 4): one InstancedMesh per registered ANIMAL species — procedural
- * box geometry sized by the species' bodySize, per-instance scale from the size trait, deterministic
+ * box geometry sized by the species' bodySize (world-space meters at the mid size trait), per-instance
+ * scale from visualScale() (size trait mapped onto a ±25% band around it — see base.ts), deterministic
  * colour jitter from agent id + species palette. Animal counts are low hundreds, so every live
  * instance's matrix is rewritten each frame (no dirty-set needed at this scale; colours upload only on
  * population change). Generic over the registry: a new animal species module auto-appears here once
@@ -11,6 +12,7 @@ import * as THREE from 'three';
 import type { Agent } from '../sim/types';
 import { getSpecies } from '../sim/registry';
 import type { AnimalSpecies } from '../sim/agents/animals/base';
+import { visualScale } from '../sim/agents/animals/base';
 import { agentRand } from '../sim/rng';
 
 type RGB = [number, number, number];
@@ -37,7 +39,8 @@ interface SpeciesRender {
   mesh: THREE.InstancedMesh;
   agents: Agent[]; // slot i → live agent (copy of refs)
   capacity: number;
-  body: [number, number, number]; // species bodySize at size trait = 1
+  body: [number, number, number]; // species bodySize in meters at the mid size trait
+  sp: AnimalSpecies; // species table — visualScale reads its size-trait bounds per instance
 }
 
 export class AnimalRenderer {
@@ -85,7 +88,7 @@ export class AnimalRenderer {
     let sr = this.bySpecies.get(spId);
     if (!sr) {
       const sp = getSpecies(spId) as AnimalSpecies;
-      sr = this.createSpeciesRender(spId, sp.bodySize, Math.max(arr.length, 16));
+      sr = this.createSpeciesRender(spId, sp, Math.max(arr.length, 16));
       this.bySpecies.set(spId, sr);
     }
 
@@ -103,8 +106,8 @@ export class AnimalRenderer {
     sr.mesh.instanceMatrix.needsUpdate = true; // full upload (no ranges at this scale)
   }
 
-  private createSpeciesRender(spId: string, body: [number, number, number], capacity: number): SpeciesRender {
-    const [bw, bh, bd] = body;
+  private createSpeciesRender(spId: string, sp: AnimalSpecies, capacity: number): SpeciesRender {
+    const [bw, bh, bd] = sp.bodySize; // meters at the mid size trait — see visualScale for per-instance scaling
     const geo = new THREE.BoxGeometry(bw, bh, bd);
     geo.translate(0, bh / 2, 0); // base at y=0 so the box sits on the terrain and scales upward
     const material = new THREE.MeshLambertMaterial({ color: 0xffffff }); // white base → instanceColor shows through
@@ -112,7 +115,7 @@ export class AnimalRenderer {
     mesh.count = 0;
     mesh.frustumCulled = false; // instances span the whole world — never cull by geometry bounds
     this.group.add(mesh);
-    return { id: spId, mesh, agents: [], capacity, body };
+    return { id: spId, mesh, agents: [], capacity, body: sp.bodySize, sp };
   }
 
   /** Grow the GPU buffer when population exceeds capacity (mice breed). */
@@ -131,9 +134,11 @@ export class AnimalRenderer {
     this.group.add(sr.mesh);
   }
 
-  /** Compose one instance's matrix: position on terrain × fixed per-id yaw × size-trait scale. */
+  /** Compose one instance's matrix: position on terrain × fixed per-id yaw × visual-scale. The size trait is
+   *  mapped through visualScale (full trait range → ±25% around the species' bodySize in meters) — never a
+   *  raw multiplier, so no individual can render at several-meters scale regardless of trait drift. */
   private writeMatrix(sr: SpeciesRender, slot: number, a: Agent): void {
-    const s = a.traits?.size ?? 1; // per-instance scale from the size trait
+    const s = visualScale(sr.sp, a.traits?.size ?? (sr.sp.traits.size.min + sr.sp.traits.size.max) / 2);
     this.tmpPos.set(a.pos.x, a.pos.y, a.pos.z);
     this.tmpEuler.set(0, agentRand(a.id, 0x7a11) * Math.PI * 2, 0); // fixed heading per animal (no velocity stored)
     this.tmpQuat.setFromEuler(this.tmpEuler);

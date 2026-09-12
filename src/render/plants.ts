@@ -12,6 +12,7 @@ import { STAGE_INDEX, STAGE_SENESCENCE } from '../sim/types';
 import { getSpecies } from '../sim/registry';
 import type { PlantSpecies } from '../sim/types';
 import { agentRand } from '../sim/rng';
+import { TREE_CANOPY_RADIUS, TREE_WORLD_HEIGHT } from '../sim/agents/plants/tree';
 
 /** Withered brown that senescent plants mix toward. */
 const WITHER: [number, number, number] = [0.45, 0.36, 0.19];
@@ -43,14 +44,20 @@ function bushGeo(): THREE.BufferGeometry {
   g.translate(0, 0.4, 0);
   return g;
 }
+/** Trunk: the lower half of TREE_WORLD_HEIGHT (y 0 → H/2), tapering from a ~1 m base to a ~0.7 m crown. */
 function trunkGeo(): THREE.BufferGeometry {
-  const g = new THREE.CylinderGeometry(0.28, 0.4, 1.8, 6);
-  g.translate(0, 0.9, 0);
+  const h = TREE_WORLD_HEIGHT / 2;
+  const g = new THREE.CylinderGeometry(0.35, 0.55, h, 6);
+  g.translate(0, h / 2, 0);
   return g;
 }
+/** Canopy: a cone from y ≈ H/2 − 1 (overlapping the crown) up to exactly TREE_WORLD_HEIGHT, radius
+ *  TREE_CANOPY_RADIUS — at full growth the tree totals TREE_WORLD_HEIGHT meters. */
 function canopyGeo(): THREE.BufferGeometry {
-  const g = new THREE.ConeGeometry(1.7, 3.2, 8);
-  g.translate(0, 2.6, 0);
+  const base = TREE_WORLD_HEIGHT / 2 - 1; // cone base slightly below mid-height so trunk + canopy read as one mass
+  const h = TREE_WORLD_HEIGHT - base;
+  const g = new THREE.ConeGeometry(TREE_CANOPY_RADIUS, h, 8);
+  g.translate(0, base + h / 2, 0);
   return g;
 }
 
@@ -108,10 +115,19 @@ export class PlantRenderer {
 
   get object(): THREE.Group { return this.group; }
 
-  /** Sync the rendered instances to the sim's live plant agents (flat list). Call once per frame. */
+  /** Species ids currently instanced by this renderer — the debug surface / e2e use it to assert that no
+   *  animal species ever leaks into plant rendering (see sync's kind filter). */
+  speciesIds(): string[] {
+    return [...this.bySpecies.keys()];
+  }
+
+  /** Sync the rendered instances to the sim's live PLANT agents (flat list). Call once per frame. */
   sync(agents: Agent[]): void {
     for (const arr of this.work.values()) arr.length = 0;
     for (const a of agents) {
+      if (getSpecies(a.species)?.kind !== 'plant') continue; // animals have their own renderer — without
+        // this filter every animal is ALSO instanced here as a generic cone that follows the animal, which
+        // reads as "plants moving" (the mirror image of AnimalRenderer's plant filter)
       let arr = this.work.get(a.species);
       if (!arr) {
         arr = [];

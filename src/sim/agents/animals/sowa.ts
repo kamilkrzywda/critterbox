@@ -44,7 +44,7 @@ export const SOWA: AnimalSpecies = {
   popCap: 16,
   foodSpecies: [], // carnivore — prey only
   preySpecies: ['mysz', 'zajac'],
-  bodySize: [0.4, 0.5, 0.4], // round brown box at size=1 (rendering)
+  bodySize: [0.32, 0.4, 0.4], // world-space meters at mid size trait → rendered 0.3–0.5 m high (a real owl)
   activityLevel: () => 1, // PHASE 7 HOOK: light → activity (nocturnal); hunting in base.decide is gated by this
 };
 

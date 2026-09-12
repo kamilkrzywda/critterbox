@@ -106,6 +106,7 @@ try {
     const rngMod = tmpRequire('./sim/rng.js');
     const typesMod = tmpRequire('./sim/types.js');
     const registryMod = tmpRequire('./sim/registry.js');
+    const treeMod = tmpRequire('./sim/agents/plants/tree.js'); // world-space size constants (TREE_WORLD_HEIGHT etc.)
     const spatialMod = tmpRequire('./sim/spatial.js');
     const energyMod = tmpRequire('./sim/energy.js');
     const simCoreMod = tmpRequire('./sim/sim.js');
@@ -138,7 +139,8 @@ try {
         grazePlant: simCoreMod.grazePlant,
         pollinatePlant: simCoreMod.pollinatePlant,
         seedLife: seedLifeMod.seedLife,
-        animals: animalsBaseMod, // shared animal framework (updateAnimal/tryBreed/hooks)
+        animals: animalsBaseMod, // shared animal framework (updateAnimal/tryBreed/hooks + visualScale size mapping)
+        tree: treeMod, // tree species table + world-space size constants (size-mapping checks)
         mysz: myszMod.MYSZ, // the mouse species table (trait bounds for assertions)
         zajac: zajacMod.ZAJAC,
         chomik: chomikMod.CHOMIK,

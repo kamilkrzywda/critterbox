@@ -44,7 +44,7 @@ export const SARNA: AnimalSpecies = {
   wanderRadius: 30,
   popCap: 60,
   foodSpecies: ['reed', 'cranberry', 'tree'], // browser — trees included (browse, not kill)
-  bodySize: [1.2, 1.8, 2.2], // large reddish-brown deer ~2.2 m long at size=1 (rendering)
+  bodySize: [0.8, 1.75, 2.0], // world-space meters at mid size trait → rendered 1.3–2.2 m high, 1.5–2.5 m long (a real roe deer — was 6–10 m tall before the visual-scale fix)
 };
 
 registerSpecies(SARNA);

@@ -14,6 +14,17 @@ export const TREE_VARIANT_BIRCH = 0;
 export const TREE_VARIANT_OAK = 1;
 export const TREE_VARIANT_PINE = 2;
 
+/**
+ * World-space size of a FULL-GROWTH tree in meters (trunk + canopy), the single source of truth for the
+ * tree geometry in render/plants.ts. Sanity targets: total height 8–15 m and canopy radius 3–6 m — trees
+ * must be the dominant vertical feature of forest biomes (a full-growth deer is ~2 m tall). The growth
+ * scale (0.2 → 1.0 with energy) means seedlings are ~2.4 m and mature trees exactly TREE_WORLD_HEIGHT.
+ */
+export const TREE_WORLD_HEIGHT = 12; // trunk + canopy, within the 8–15 m band
+export const TREE_CANOPY_RADIUS = 4; // within the 3–6 m band
+/** Lower bound of the sanity band — regression checks assert no animal's max body height exceeds this. */
+export const TREE_MIN_TOTAL_HEIGHT = 8;
+
 export const TREE: PlantSpecies = {
   id: 'tree',
   kind: 'plant',

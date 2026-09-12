@@ -189,6 +189,8 @@ declare global {
       setPaused(p: boolean): void;
       agentCount: number;
       populations: { [species: string]: { count: number; avgEnergy: number } };
+      /** Species ids instanced by the PLANT renderer — e2e asserts this never contains an animal species. */
+      plantRendererSpecies(): string[];
     };
   }
 }
@@ -211,6 +213,7 @@ window.__critterbox = {
   setPaused(p: boolean): void { setPaused(!!p); },
   get agentCount() { return sim ? sim.agents.length : 0; },
   get populations() { return sim ? sim.populations() : {}; },
+  plantRendererSpecies(): string[] { return plantRenderer ? plantRenderer.speciesIds() : []; },
 };
 
 // --- render loop -----------------------------------------------------------------------------

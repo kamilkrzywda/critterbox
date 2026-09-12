@@ -43,7 +43,7 @@ export const MYSZ: AnimalSpecies = {
   popCap: 400,
   foodSpecies: ['grass', 'clover'],
   preySpecies: ['owady'], // insects — extra digestion energy; the prey is killed when fed upon
-  bodySize: [0.22, 0.14, 0.3], // small grey-brown box ~0.3 m long at size=1 (rendering)
+  bodySize: [0.16, 0.12, 0.2], // world-space meters at mid size trait → rendered 0.09–0.15 m high, 0.15–0.25 m long (a real mouse)
 };
 
 registerSpecies(MYSZ);

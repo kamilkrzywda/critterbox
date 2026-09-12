@@ -52,7 +52,7 @@ export const ZABA: AnimalSpecies = {
   popCap: 90, // the marsh food base (insects + cranberries) can't support more without mass starvation (Phase 5)
   foodSpecies: ['cranberry'], // marsh generalist fallback: browse the berry bushes when local insects run thin
   preySpecies: ['owady'], // primary diet — marsh insects
-  bodySize: [0.25, 0.18, 0.3], // low green box ~0.3 m at size=1 (rendering)
+  bodySize: [0.1, 0.09, 0.14], // world-space meters at mid size trait → rendered 0.07–0.11 m high, ~0.1–0.18 m long (a real frog)
   validTarget: inMarshZone, // marsh/water-edge constraint (wander targets only — see module header)
 };
 

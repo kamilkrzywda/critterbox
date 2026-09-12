@@ -2,6 +2,12 @@
 
 All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 
+## [Unreleased]
+
+### Fixed
+- Plants no longer drift — positions immutable after seeding: the plant renderer was instancing EVERY agent (animals included) because `PlantRenderer.sync` lacked the kind filter its animal-renderer counterpart has, so each animal also rendered as a generic cone that followed it around — reading as "visibly moving plants". Plant instances are now written once per agent (plus on stage/growth-bucket change) and never move; sim-side plant positions were already provably static (new headless check asserts byte-identical positions after 4000 steps, e2e asserts no animal species ever enters the plant renderer)
+- Deer/tree and all-species world-space scales corrected with per-species size mapping: the raw size trait was used as a geometry scale multiplier on ~1 m base boxes, making deer (size trait 3.5–5.5) up to ~10 m tall while trees were only ~6 m. Each species now declares `bodySize` in world-space meters at its size-trait midpoint and the renderer maps the full trait range onto a fixed ±25% band (`visualScale`, base.ts); tree geometry rebuilt from explicit constants (12 m total, 4 m canopy radius — within the 8–15 m / 3–6 m sanity bands). The size trait's effect on energy capacity is unchanged. New headless check guards deer-max-height < tree-min-total-height and per-species dimension targets
+
 ## [0.6.0] - 2026-09-12
 
 ### Added

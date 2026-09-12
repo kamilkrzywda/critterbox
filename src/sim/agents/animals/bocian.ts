@@ -52,7 +52,7 @@ export const BOCIAN: AnimalSpecies = {
   popCap: 16,
   foodSpecies: [], // carnivore — prey only
   preySpecies: ['zaba', 'mysz'],
-  bodySize: [0.4, 0.9, 0.7], // tall white box ~0.9 m high at size=1 (rendering)
+  bodySize: [0.3, 1.0, 0.5], // world-space meters at mid size trait → rendered 0.75–1.25 m tall on the legs (a real stork — the tallest bird)
   validTarget: inStorkZone, // marsh/shallow-water constraint (wander targets only — see module header)
 };
 

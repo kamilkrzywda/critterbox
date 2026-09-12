@@ -41,7 +41,7 @@ export const ZAJAC: AnimalSpecies = {
   wanderRadius: 16, // stay near the family patch — wide radius diffuses hare families apart (Phase 5)
   popCap: 150,
   foodSpecies: ['grass', 'clover'],
-  bodySize: [0.5, 0.35, 0.7], // medium brown hare ~0.7 m long at size=1 (rendering)
+  bodySize: [0.4, 0.5, 0.75], // world-space meters at mid size trait → rendered 0.38–0.63 m high, 0.56–0.94 m long (a real hare)
 };
 
 registerSpecies(ZAJAC);

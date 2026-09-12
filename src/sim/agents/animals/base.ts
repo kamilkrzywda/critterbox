@@ -132,7 +132,11 @@ export interface AnimalSpecies extends Species {
   /** Activity hook (Phase 5/7): current activity multiplier in [0,1]; hunting requires > 0. Returns 1.0 for
    *  diurnal species by default (unset); Phase 7 wires light → activity so owls hunt at night only. */
   activityLevel?: () => number;
-  /** Body box dimensions in meters at size trait = 1 (rendering). */
+  /** World-space body box dimensions in METERS at the MIDPOINT of the size trait (width, height, depth) —
+   *  the explicit per-species size mapping for rendering. The renderer maps the full size-trait range onto
+   *  a ±25% band around these values via visualScale() (see below), so an individual's rendered body stays
+   *  within [0.75, 1.25] × these dimensions no matter how far the trait drifts over generations. The size
+   *  trait ALSO drives energy capacity (animalEnergyMax) on its raw scale — that is unchanged. */
   bodySize: [number, number, number];
   /** Optional species-specific decision override (insects pollinate instead of grazing). When set, replaces the generic decide(). */
   decide?: (sim: Sim, a: Agent, sp: AnimalSpecies) => void;
@@ -144,6 +148,27 @@ export interface AnimalSpecies extends Species {
 /** Energy capacity of an agent: the 0–100 scale × its size trait. */
 export function animalEnergyMax(a: Agent): number {
   return ANIMAL_ENERGY_MAX * (a.traits?.size ?? 1);
+}
+
+// --- visual size mapping ---------------------------------------------------------------------------
+// The size trait is a raw heritable number whose bounds are species-specific (mouse 0.7–1.3, deer 3.5–5.5).
+// Using it directly as a geometry scale made deer ~10 m tall while trees were ~6 m — the scene read wrong.
+// Instead each species declares bodySize in meters at its size-trait MIDPOINT (see AnimalSpecies.bodySize)
+// and the renderer maps the full trait range onto this fixed ±25% band around it: a big individual is 1.25×
+// the midpoint dimensions, a small one 0.75× — visible variety without breaking world-space sanity.
+
+/** Visual scale at the smallest size trait (maps to 0.75 × bodySize). */
+export const VISUAL_SCALE_MIN = 0.75;
+/** Visual scale at the largest size trait (maps to 1.25 × bodySize). */
+export const VISUAL_SCALE_MAX = 1.25;
+
+/** World-space visual scale for an animal's size trait: linear map of [trait.min, trait.max] → [0.75, 1.25]. */
+export function visualScale(sp: AnimalSpecies, sizeTrait: number): number {
+  const t = sp.traits.size;
+  if (!t) return 1;
+  const f = (sizeTrait - t.min) / (t.max - t.min);
+  const clamped = f < 0 ? 0 : f > 1 ? 1 : f; // defensive — traits are always within bounds
+  return VISUAL_SCALE_MIN + (VISUAL_SCALE_MAX - VISUAL_SCALE_MIN) * clamped;
 }
 
 /** Temperature hook — Phase 7 swaps in the weather curve; returns 1.0 for now. */

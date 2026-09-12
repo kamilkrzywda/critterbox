@@ -44,7 +44,7 @@ export const WRONA: AnimalSpecies = {
   popCap: 40,
   foodSpecies: ['cranberry'], // berries — the cheap generalist bonus on top of corpses + insects
   preySpecies: ['owady'],
-  bodySize: [0.3, 0.3, 0.4], // small black box at size=1 (rendering)
+  bodySize: [0.2, 0.26, 0.38], // world-space meters at mid size trait → rendered 0.2–0.33 m high, 0.29–0.48 m long (a real crow)
   decide: scavengerDecide, // corpse first when hungry, then insects/berries — see corpses.ts
 };
 

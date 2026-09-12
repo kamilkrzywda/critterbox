@@ -48,7 +48,7 @@ export const LIS: AnimalSpecies = {
   popCap: 24,
   foodSpecies: [], // carnivore — prey + corpses only
   preySpecies: ['mysz', 'zajac', 'zaba'],
-  bodySize: [0.5, 0.4, 0.9], // orange-red box ~0.9 m long at size=1 (rendering)
+  bodySize: [0.4, 0.5, 0.85], // world-space meters at mid size trait → rendered 0.38–0.63 m high, 0.64–1.06 m long incl. tail (a real fox)
   decide: scavengerDecide, // corpse first when hungry, then prey — see corpses.ts
 };
 

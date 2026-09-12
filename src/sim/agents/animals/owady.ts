@@ -54,7 +54,7 @@ export const OWADY: AnimalSpecies = {
   wanderRadius: 12,
   popCap: 600,
   foodSpecies: [], // no grazing — nectar only, via feedOnTarget
-  bodySize: [0.12, 0.06, 0.15], // tiny dark speck at size=1 (rendering)
+  bodySize: [0.04, 0.03, 0.06], // world-space meters at mid size trait → rendered ≤ ~7 cm long (a real insect — a tiny dark speck)
   decide: insectDecide,
   feedOnTarget: feedOnNectar,
 };

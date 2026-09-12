@@ -41,7 +41,7 @@ export const CHOMIK: AnimalSpecies = {
   wanderRadius: 20,
   popCap: 200,
   foodSpecies: ['grass', 'clover', 'cranberry'], // seed eater — berries included
-  bodySize: [0.4, 0.3, 0.5], // tan stocky box ~0.5 m long at size=1 (rendering)
+  bodySize: [0.2, 0.16, 0.24], // world-space meters at mid size trait → rendered 0.12–0.2 m high, 0.18–0.3 m long (a real hamster)
 };
 
 registerSpecies(CHOMIK);

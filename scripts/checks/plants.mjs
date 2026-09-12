@@ -86,6 +86,53 @@ export default {
     ctx.check('plants: an overgrazed (zero-energy) plant dies by starvation', !sim2.agents.includes(fresh));
   },
 
+  /**
+   * Plant immutability (Bug-1 regression guard): after N sim steps on a generated world, EVERY plant that
+   * was alive at t=0 must sit at its EXACT seeded position — byte-identical floats. Plants are strictly
+   * static: their position is set once at seeding and no step pass may ever write it (movement/wander/
+   * foraging logic applies to animals only). Fails if any plant's x/y/z drifts by even one ulp.
+   */
+  immutability(ctx) {
+    const { generateWorld } = ctx.worldgen;
+    const Sim = ctx.sim.Sim;
+    const seedLife = ctx.sim.seedLife;
+
+    const SEED = 1337, SIZE = 200, STEPS = 4000;
+    const sim = new Sim(generateWorld({ seed: SEED, size: SIZE }));
+    seedLife(sim);
+
+    // Record every seeded plant's position (plants carry no sex/traits — animals do).
+    const seeded = new Map();
+    for (const a of sim.agents) {
+      if (!a.sex && !a.traits) seeded.set(a.id, [a.pos.x, a.pos.y, a.pos.z]);
+    }
+    ctx.check(`plants: immutability — recorded ${seeded.size} seeded plants`, seeded.size > 1000);
+
+    for (let i = 0; i < STEPS; i++) sim.step();
+
+    let checked = 0, moved = 0;
+    let firstMoved = null;
+    for (const a of sim.agents) {
+      const p0 = seeded.get(a.id);
+      if (!p0) continue; // born after t=0 — a birth, not a move
+      checked++;
+      if (a.pos.x !== p0[0] || a.pos.y !== p0[1] || a.pos.z !== p0[2]) {
+        moved++;
+        if (!firstMoved) firstMoved = { id: a.id, species: a.species, from: p0, to: [a.pos.x, a.pos.y, a.pos.z] };
+      }
+    }
+    ctx.check(`plants: immutability — all ${checked} surviving plants byte-identical after ${STEPS} steps (moved=${moved})`, moved === 0);
+    if (firstMoved) console.error('  first moved plant:', JSON.stringify(firstMoved));
+
+    // The run must have actually churned the population (deaths + seedling births), so a static result is
+    // meaningful and not an artifact of a sim that never stepped.
+    const nowPlants = new Set(sim.agents.filter((a) => !a.sex && !a.traits).map((a) => a.id));
+    let deaths = 0, births = 0;
+    for (const id of seeded.keys()) if (!nowPlants.has(id)) deaths++;
+    for (const id of nowPlants) if (!seeded.has(id)) births++;
+    ctx.check(`plants: immutability — run exercised the lifecycle (${deaths} deaths, ${births} births in ${STEPS} steps)`, deaths > 0 && births > 0);
+  },
+
   /** On a default world, every seeded biome contributes plants and all five species are present. */
   populationSanity(ctx) {
     const { generateWorld } = ctx.worldgen;
