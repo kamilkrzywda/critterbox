@@ -33,6 +33,8 @@ const SOURCES = [
   'src/sim/agents/plants/cranberry.ts',
   'src/sim/agents/plants/reed.ts',
   'src/sim/agents/plants/tree.ts',
+  'src/sim/agents/animals/base.ts',
+  'src/sim/agents/animals/mysz.ts',
   'src/sim/agents/index.ts',
   'src/sim/sim.ts',
   'src/sim/seedLife.ts',
@@ -93,6 +95,8 @@ try {
     const energyMod = tmpRequire('./sim/energy.js');
     const simCoreMod = tmpRequire('./sim/sim.js');
     const seedLifeMod = tmpRequire('./sim/seedLife.js');
+    const animalsBaseMod = tmpRequire('./sim/agents/animals/base.js');
+    const myszMod = tmpRequire('./sim/agents/animals/mysz.js');
 
     const ctxExtra = {
       worldgen: worldgenMod,
@@ -106,6 +110,8 @@ try {
         Sim: simCoreMod.Sim,
         grazePlant: simCoreMod.grazePlant,
         seedLife: seedLifeMod.seedLife,
+        animals: animalsBaseMod, // shared animal framework (updateAnimal/tryBreed/hooks)
+        mysz: myszMod.MYSZ, // the mouse species table (trait bounds for assertions)
       },
     };
 

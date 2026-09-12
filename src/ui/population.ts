@@ -1,12 +1,14 @@
 /**
  * Population panel (PLAN "UI / HUD"): a compact overlay listing one row per species — name + live count
  * (+ average energy/growth) — refreshed ~4 Hz from the sim's population stats. Plain DOM, styled to match
- * the world-gen panel. Animals are added to this same panel in Phase 4 by extending `rows`.
+ * the world-gen panel. Phase 4 adds an animals section: `header` rows render as dividers above animal rows.
  */
 
 export interface PopRow {
-  id: string; // species registry key
+  id: string; // species registry key (or a synthetic id for header rows)
   name: string; // display label
+  /** Section divider row (no count/avg) — e.g. the "animals" header above animal rows. */
+  header?: boolean;
 }
 
 export interface PopulationData {
@@ -22,6 +24,14 @@ export function initPopulationPanel(
   const rowEls = new Map<string, { count: HTMLElement; avg: HTMLElement }>();
 
   for (const r of rows) {
+    if (r.header) {
+      const header = document.createElement('div');
+      header.className = 'pop-section';
+      header.textContent = r.name;
+      container.appendChild(header);
+      continue; // no live stats on dividers
+    }
+
     const row = document.createElement('div');
     row.className = 'pop-row';
     row.dataset.species = r.id;
@@ -46,6 +56,7 @@ export function initPopulationPanel(
   function update(): void {
     const data = getData();
     for (const r of rows) {
+      if (r.header) continue; // dividers carry no stats
       const els = rowEls.get(r.id)!;
       const entry = data[r.id];
       els.count.textContent = String(entry ? entry.count : 0);

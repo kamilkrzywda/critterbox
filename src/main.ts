@@ -14,18 +14,22 @@ import { initWorldgenPanel } from './ui/panel';
 import { Sim } from './sim/sim';
 import { seedLife } from './sim/seedLife';
 import { PlantRenderer } from './render/plants';
-import { initPopulationPanel } from './ui/population';
+import { AnimalRenderer } from './render/animals';
+import { initPopulationPanel, type PopRow } from './ui/population';
 
 const DEFAULT_SEED = 1337;
 const DEFAULT_SIZE = 300;
 
-/** Plant species shown in the population panel (animals are added here in Phase 4). */
-const PLANT_ROWS: { id: string; name: string }[] = [
+/** Species shown in the population panel: plants, then an animals section (Phase 4). */
+const PLANT_ROWS: PopRow[] = [
   { id: 'grass', name: 'trawa' },
   { id: 'clover', name: 'koniczyna' },
   { id: 'cranberry', name: 'borówka' },
   { id: 'reed', name: 'trzcina' },
   { id: 'tree', name: 'drzewo' },
+];
+const ANIMAL_ROWS: PopRow[] = [
+  { id: 'mysz', name: 'mysz' },
 ];
 
 // --- renderer / scene -------------------------------------------------------------------
@@ -74,20 +78,25 @@ let world: World | null = null;
 let terrainGroup: THREE.Group | null = null;
 let sim: Sim | null = null;
 let plantRenderer: PlantRenderer | null = null;
+let animalRenderer: AnimalRenderer | null = null;
 let refreshPanel: ((seed: number, size: number) => void) | null = null;
 
 function applyWorld(seed: number, size: number): World {
   if (terrainGroup) disposeTerrain(terrainGroup); // free the old world's GPU resources
   if (plantRenderer) { plantRenderer.dispose(); scene.remove(plantRenderer.object); }
+  if (animalRenderer) { animalRenderer.dispose(); scene.remove(animalRenderer.object); }
   world = generateWorld({ seed, size });
   terrainGroup = buildTerrain(world);
   scene.add(terrainGroup);
 
   sim = new Sim(world);
-  seedLife(sim); // deterministic plant population derived from the world (same seed+size → identical)
+  seedLife(sim); // deterministic plant + mouse population derived from the world (same seed+size → identical)
   plantRenderer = new PlantRenderer();
   scene.add(plantRenderer.object);
   plantRenderer.sync(sim.agents); // initial full instance upload
+  animalRenderer = new AnimalRenderer();
+  scene.add(animalRenderer.object);
+  animalRenderer.sync(sim.agents);
 
   frameWorld(world.size);
   refreshPanel?.(world.seed, world.size);
@@ -109,9 +118,12 @@ const panel = initWorldgenPanel({ onNewWorld: (seed, size) => { applyWorld(seed,
 refreshPanel = panel.setWorld;
 panel.setWorld(initial.seed, initial.size);
 
-// Population panel — one row per plant species, refreshed ~4 Hz from the sim's live stats.
+// Population panel — plant rows + an animals section, refreshed ~4 Hz from the sim's live stats.
 const popContainer = document.getElementById('population-panel');
-if (popContainer) initPopulationPanel(popContainer, PLANT_ROWS, () => sim?.populations() ?? {});
+if (popContainer) {
+  const rows: PopRow[] = [...PLANT_ROWS, { id: '§animals', name: 'animals', header: true }, ...ANIMAL_ROWS];
+  initPopulationPanel(popContainer, rows, () => sim?.populations() ?? {});
+}
 
 // --- pause (Space) ---------------------------------------------------------------------------
 
@@ -144,9 +156,10 @@ let lastTime = performance.now();
 let tick = 0;
 
 function stepSim(): void {
-  if (!sim || !plantRenderer) return;
-  sim.step(); // advance agents one fixed tick (growth / stages / death)
+  if (!sim || !plantRenderer || !animalRenderer) return;
+  sim.step(); // advance agents one fixed tick (plants: growth/stages/death; animals: behaviour/eating/breeding)
   plantRenderer.sync(sim.agents); // incremental instance updates from the change-feed
+  animalRenderer.sync(sim.agents); // full matrix rewrite each frame (low counts — fine)
 }
 
 // --- debug surface --------------------------------------------------------------------------

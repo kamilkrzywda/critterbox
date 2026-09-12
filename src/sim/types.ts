@@ -1,12 +1,12 @@
 /**
  * Base agent schema + species tables (PLAN "Life simulation / Agent model"). Plain objects and plain
  * behaviour tables — no ECS, no class hierarchy (Sandfall pattern). This module is pure TS: it defines
- * shapes only, so it compiles & runs headlessly. `sex`/`traits` are reserved for Phase 4 animals;
- * plants don't need them yet. `variant` is a small plant-specific extension used by trees (the
+ * shapes only, so it compiles & runs headlessly. `sex`/`traits`/`data` are the animal fields used from
+ * Phase 4; plants don't need them. `variant` is a small plant-specific extension used by trees (the
  * birch/oak/pine form chosen by biome at seeding).
  */
 
-/** Sex — reserved for Phase 4 (50/50 at birth, breeding requires opposite-sex pairs). */
+/** Sex — set at birth (50/50 via agentRand); breeding requires opposite-sex pairs. */
 export type Sex = 'm' | 'f';
 
 /** World-space position in centered meters; y is the terrain height at spawn. */
@@ -23,14 +23,16 @@ export interface Agent {
   /** Species registry key (e.g. 'grass', 'tree'). */
   species: string;
   pos: Vec3;
-  /** Plants: biomass/health in [0, maxEnergy]. Animals (P4): energy budget. */
+  /** Plants: biomass/health in [0, maxEnergy]. Animals: energy budget on the 0–100 scale (× size trait). */
   energy: number;
   /** Ticks alive. */
   age: number;
-  /** Plant stage-machine state (see STAGE_*); animal behaviour state from Phase 4. */
+  /** Plant stage-machine state (see STAGE_*); animal behaviour state (see ANIMAL_STATE_*). */
   state: string;
-  sex?: Sex; // reserved for Phase 4
-  traits?: Record<string, number>; // reserved for Phase 4 (heritable numeric traits)
+  sex?: Sex; // animals only — set at birth, 50/50 via agentRand
+  traits?: Record<string, number>; // animals only — heritable numeric traits (mean of parents + mutation)
+  /** Animal per-entity memory (JSON-safe numbers): lastBreedStep, behaviour target coords. */
+  data?: Record<string, number>;
   variant?: number; // tree form chosen by biome at seeding: 0 birch, 1 oak, 2 pine
 }
 
@@ -79,3 +81,11 @@ export const STAGE_INDEX: Record<string, number> = {
   [STAGE_REGROWTH]: 3,
   [STAGE_SENESCENCE]: 4,
 };
+
+// --- Animal behaviour states (Phase 4) ----------------------------------------------------
+// idle/wander → seekFood → eat → mate; decisions are sampled every few ticks (see animals/base.ts).
+export const ANIMAL_STATE_IDLE = 'idle';
+export const ANIMAL_STATE_WANDER = 'wander';
+export const ANIMAL_STATE_SEEK_FOOD = 'seekFood';
+export const ANIMAL_STATE_EAT = 'eat';
+export const ANIMAL_STATE_MATE = 'mate';
