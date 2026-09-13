@@ -1,6 +1,6 @@
 # Critterbox — AGENTS.md
 
-Instructions for AI agents working on this repo. Food chain sim: three.js + vite stack, pure-TS sim core. v0.11.0.
+Instructions for AI agents working on this repo. Food chain sim: three.js + vite stack, pure-TS sim core.
 
 ## Context budget (IMPORTANT)
 
