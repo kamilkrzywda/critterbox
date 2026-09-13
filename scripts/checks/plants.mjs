@@ -42,12 +42,18 @@ export default {
     const sim = new Sim(world);
     const plant = sim.addAgent('clover', 10, 10); // clover: maxEnergy 90, fruits at f≥0.8 (energy≥72)
 
+    // Phase 7: growth is light-gated by the day/night clock — advance to near-noon first so the
+    // fruiting-time measurement happens under full light instead of starting in the dark dawn. Jump the
+    // counter WITHOUT stepping agents (stepping would let the clover grow — and fruit — during the jump).
+    const { lightAt } = ctx.sim.environment;
+    while (lightAt(sim.stepCount) < 0.95) sim.stepCount++;
+
     let stepsToFruit = -1;
     for (let i = 0; i < 2000 && plant.state !== 'fruiting'; i++) {
       sim.step();
       if (plant.state === 'fruiting') { stepsToFruit = i + 1; break; }
     }
-    ctx.check(`plants: clover reaches fruiting within expected time (${stepsToFruit} ticks)`, stepsToFruit > 0 && stepsToFruit < 500);
+    ctx.check(`plants: clover reaches fruiting within expected time under daylight (${stepsToFruit} ticks from near-noon)`, stepsToFruit > 0 && stepsToFruit < 500);
 
     // Graze hard (below the regrowth floor but not to zero) → must enter regrowth.
     const before = plant.energy;

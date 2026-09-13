@@ -1,9 +1,11 @@
 /**
- * Owl (PLAN roster, Phase 5). The nocturnal hunter of mouse/hare. Day/night arrives in Phase 7:
- * the framework's `activityLevel` hook gates hunting (base.decide requires activity > 0 before seeking
- * prey) and returns 1.0 for now — Phase 7 wires light → activity so owls hunt at night only while foxes
- * and storks rest. Until then the owl behaves like any other hunger-gated predator. Self-registers into
- * the species registry at load; behaviour comes from ./base.ts parameterized by this table + traits.
+ * Owl (PLAN roster, Phase 5). The nocturnal hunter of mouse/hare. Phase 7 wires light → activity:
+ * `activityLevel` returns ~1 at night and ~0 at noon (a small day floor keeps a trickle of crepuscular
+ * foraging — see the hook below), so owls hunt almost exclusively in the dark while foxes and storks rest.
+ * Phase 7 stability tuning: compressing all hunting into the night window (~30% of the cycle) breaks the
+ * pre-Phase-7 energy balance (one mouse kill ≈ coast-to-gate burn, spread over a full day), so resting
+ * metabolism drops 0.06 → 0.015 — an owl that can only feed at night burns less while roosting. Self-registers
+ * into the species registry at load; behaviour comes from ./base.ts parameterized by this table + traits.
  *
  * Traits (name / min / max / σ) — bounds clamp mutation; σ is the Gaussian sd applied at birth:
  *   speed       0.8 – 1.3    (σ 0.10)  move-speed multiplier — silent flight, comparable to the fox's
@@ -27,7 +29,7 @@ export const OWL: AnimalSpecies = {
     fertility: { min: 0.4, max: 0.9, sigma: 0.1 },
     lifespan: { min: 14400, max: 28800, sigma: 1500 },
   },
-  baseMetabolism: 0.06, // per tick at metabolism=1
+  baseMetabolism: 0.015, // per tick at metabolism=1 — Phase 7: was 0.06; night-compressed hunting needs a low roost burn (see module header)
   moveCostPerMeter: 0.3,
   baseSpeed: 0.15, // m/tick at speed=1 (~4.5 m/s at 1×) — comparable to the fox (0.16)
   senseRadius: 30, // nocturnal aerial hunter — scans a wide disc from the roost
@@ -45,7 +47,9 @@ export const OWL: AnimalSpecies = {
   foodSpecies: [], // carnivore — prey only
   preySpecies: ['mouse', 'hare'],
   bodySize: [0.32, 0.4, 0.4], // world-space meters at mid size trait → rendered 0.3–0.5 m high (a real owl)
-  activityLevel: () => 1, // PHASE 7 HOOK: light → activity (nocturnal); hunting in base.decide is gated by this
+  activityLevel: (sim) => 0.2 + 0.8 * (1 - sim.environment.light), // Phase 7: NOCTURNAL — full activity at night (light=0),
+  // a small day floor (0.2) keeps crepuscular foraging so the night-compressed hunting window still balances
+  // the energy budget (see module header); dawn/dusk fall in between via the light curve
 };
 
 registerSpecies(OWL);

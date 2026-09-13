@@ -30,6 +30,8 @@ const SOURCES = [
   'src/sim/registry.ts',
   'src/sim/spatial.ts',
   'src/sim/energy.ts',
+  // Phase 7: day/night + weather animator curves (pure functions of step counter + world seed)
+  'src/sim/environment.ts',
   'src/sim/agents/plants/grass.ts',
   'src/sim/agents/plants/clover.ts',
   'src/sim/agents/plants/cranberry.ts',
@@ -113,6 +115,8 @@ try {
     const treeMod = tmpRequire('./sim/agents/plants/tree.js'); // world-space size constants (TREE_WORLD_HEIGHT etc.)
     const spatialMod = tmpRequire('./sim/spatial.js');
     const energyMod = tmpRequire('./sim/energy.js');
+    // Phase 7: day/night + weather animator curves (clock/light/season/weather Markov/multipliers)
+    const environmentMod = tmpRequire('./sim/environment.js');
     const simCoreMod = tmpRequire('./sim/sim.js');
     const seedLifeMod = tmpRequire('./sim/seedLife.js');
     const animalsBaseMod = tmpRequire('./sim/agents/animals/base.js');
@@ -143,6 +147,7 @@ try {
         registry: registryMod,
         spatial: spatialMod,
         energy: energyMod,
+        environment: environmentMod, // Phase 7 day/night + weather: timeOfDay/dayPhase/lightAt/weatherAt/temperatureAt/multipliers
         Sim: simCoreMod.Sim,
         grazePlant: simCoreMod.grazePlant,
         pollinatePlant: simCoreMod.pollinatePlant,

@@ -31,7 +31,7 @@ export const FOX: AnimalSpecies = {
     fertility: { min: 0.5, max: 1.0, sigma: 0.12 },
     lifespan: { min: 14400, max: 28800, sigma: 1500 },
   },
-  baseMetabolism: 0.07, // per tick at metabolism=1 — a medium-large body
+  baseMetabolism: 0.03, // per tick at metabolism=1 — Phase 7: was 0.07; diurnal foraging (activity 0.3+0.7×light) compresses the hunting window to ~55% of ticks on average, so resting burn drops to keep the energy budget balanced (20k-step stability tuning)
   moveCostPerMeter: 0.3,
   baseSpeed: 0.16, // m/tick at speed=1 (~4.8 m/s at 1×) — faster than mouse (0.12)/hare (0.1)/frog (0.1)
   senseRadius: 18,
@@ -50,6 +50,9 @@ export const FOX: AnimalSpecies = {
   preySpecies: ['mouse', 'hare', 'frog'],
   bodySize: [0.4, 0.5, 0.85], // world-space meters at mid size trait → rendered 0.38–0.63 m high, 0.64–1.06 m long incl. tail (a real fox)
   decide: scavengerDecide, // corpse first when hungry, then prey — see corpses.ts
+  activityLevel: (sim) => 0.3 + 0.7 * sim.environment.light, // Phase 7: DIURNAL — full foraging by day, reduced at night
+  // (floor 0.3 keeps a trickle of nocturnal scavenging; the probability gate in scavengerDecide turns the
+  // multiplier into a hunting RATE, not an on/off switch)
 };
 
 registerSpecies(FOX);

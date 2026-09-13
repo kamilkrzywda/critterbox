@@ -84,7 +84,11 @@ export default {
     }
     ctx.check(`carpFeedOnShoreReed: repeated grazing mows the reed back to regrowth (${regrowAt} ticks)`, regrowAt > 0);
 
-    // The regrowing plant climbs back toward fruiting (growth = baseRate × fertility × light).
+    // The regrowing plant climbs back toward fruiting (growth = baseRate × fertility × light). Phase 7:
+    // growth is light-gated and the check started at dawn (light ≈ 0), so jump the clock to near-noon
+    // WITHOUT stepping any agent — positions/energy untouched, only the environment sample changes.
+    while (ctx.sim.environment.lightAt(sim.stepCount) < 0.95) sim.stepCount++;
+
     const eAfterMow = reed.energy;
     for (let i = 0; i < 250; i++) sim.step();
     ctx.check(

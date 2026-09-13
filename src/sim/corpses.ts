@@ -18,8 +18,9 @@
 
 import type { Sim } from './sim';
 import type { Agent, Vec3 } from './types';
+import { agentRand } from './rng';
 import { ANIMAL_STATE_MATE, ANIMAL_STATE_SEEK_FOOD, ANIMAL_STATE_WANDER } from './types';
-import { FORAGE_SEARCH_MULT, animalEnergyMax, attemptMate, canAttemptBreed, pickWanderTarget, registerAnimalDeathHook, seekNearestFood } from './agents/animals/base';
+import { ACTIVITY_SALT, FORAGE_SEARCH_MULT, animalEnergyMax, attemptMate, canAttemptBreed, pickWanderTarget, registerAnimalDeathHook, seekNearestFood } from './agents/animals/base';
 import type { AnimalSpecies } from './agents/animals/base';
 
 /** A decaying carcass left by a dead animal. `pos` is a COPY of the victim's position at death. */
@@ -102,8 +103,15 @@ export function scavengerDecide(sim: Sim, a: Agent, sp: AnimalSpecies): void {
   if (!a.data) a.data = {};
   const d = a.data;
 
-  // 1) Hungry → corpse first (no pursuit cost), then the nearest edible plant/prey.
-  if (a.energy / animalEnergyMax(a) < sp.hungerThreshold) {
+  // 1) Hungry AND active → corpse first (no pursuit cost), then the nearest edible plant/prey. The Phase 7
+  //    activity gate mirrors base.decide exactly: below-full activityLevel (fox is diurnal — reduced at night)
+  //    reduces the foraging RATE via a deterministic per id+tick probability draw, not an on/off switch; on
+  //    skipped ticks a hungry scavenger rests in place instead of patrolling (same energy-balance rationale).
+  const active = sp.activityLevel ? sp.activityLevel(sim) : 1;
+  if (active > 0 && a.energy / animalEnergyMax(a) < sp.hungerThreshold) {
+    if (!(active >= 1 || agentRand(a.id, sim.stepCount, ACTIVITY_SALT) < active)) {
+      return; // hungry but inactive — rest in place (see base.decide)
+    }
     const c = findNearestCorpse(sim, a.pos.x, a.pos.z, sp.senseRadius);
     if (c) {
       d.tx = c.pos.x;

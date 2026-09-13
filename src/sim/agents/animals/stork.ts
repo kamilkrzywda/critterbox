@@ -36,7 +36,7 @@ export const STORK: AnimalSpecies = {
     fertility: { min: 0.4, max: 0.9, sigma: 0.1 },
     lifespan: { min: 18000, max: 36000, sigma: 2000 },
   },
-  baseMetabolism: 0.08, // per tick at metabolism=1 — a big bird
+  baseMetabolism: 0.03, // per tick at metabolism=1 — Phase 7: was 0.08; diurnal foraging (activity 0.3+0.7×light) compresses the hunting window to ~55% of ticks on average, so resting burn drops to keep the energy budget balanced (20k-step stability tuning)
   moveCostPerMeter: 0.35,
   baseSpeed: 0.14, // m/tick at speed=1 (~4.2 m/s at 1×) — faster than the frog (0.1), catches most mice too
   senseRadius: 20, // wide forager — scans a bigger disc than the fox
@@ -54,6 +54,7 @@ export const STORK: AnimalSpecies = {
   preySpecies: ['frog', 'mouse'],
   bodySize: [0.3, 1.0, 0.5], // world-space meters at mid size trait → rendered 0.75–1.25 m tall on the legs (a real stork — the tallest bird)
   validTarget: inStorkZone, // marsh/shallow-water constraint (wander targets only — see module header)
+  activityLevel: (sim) => 0.3 + 0.7 * sim.environment.light, // Phase 7: DIURNAL — full foraging by day, reduced at night (see fox.ts)
 };
 
 registerSpecies(STORK);

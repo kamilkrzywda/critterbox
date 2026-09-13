@@ -5,8 +5,12 @@
  *
  * Phase 4: plants (growth / stage machine / death) are stepped first, then animals (behaviour / eating /
  * breeding / death). Plants and animals share ONE spatial grid — rebuilt once per tick from all live
- * agents — so animal food/partner queries see both kinds in the same structure. `light()` is a hook
- * returning 1.0 now — Phase 7 swaps in the day/night curve without touching this file.
+ * agents — so animal food/partner queries see both kinds in the same structure.
+ *
+ * Phase 7: the day/night + weather environment (./environment.ts) is sampled ONCE per tick into a cached
+ * `environment` getter (keyed on stepCount): plants read light × fertility from it here, animals read the
+ * temperature-driven metabolism multiplier and the breeding cold-snap gate in base.ts. The sample is pure
+ * in (world seed, step), so the cache stays correct even if a check sets stepCount by hand.
  *
  * Part B adds two cross-kind APIs: `pollinatePlant` (insects boost flowering-plant growth, per-plant
  * cooldown) and `killAgent` (predation — mice eat insects; mid-pass kills are compacted out safely).
@@ -24,6 +28,7 @@ import { ANIMAL_STATE_IDLE, STAGE_FRUITING, STAGE_GROWING, STAGE_REGROWTH, STAGE
 import { SpatialGrid } from './spatial';
 import { getSpecies } from './registry';
 import { agentRand } from './rng';
+import { sampleEnvironment, type EnvSample } from './environment';
 import './agents'; // side effect: register every species before any agent is created or stepped
 import type { AnimalSpecies } from './agents/animals/base';
 import { INITIAL_ANIMAL_ENERGY_FRACTION, animalEnergyMax, dropSeedlingNearby, notifyAnimalDeath, updateAnimal } from './agents/animals/base';
@@ -51,10 +56,22 @@ const PLANT_SELF_SEED_PROB = 0.002;
 const SEEDLING_TO_GROWING = 0.3;
 /** Fraction of lifespan at which a plant begins to wither (senescence) before dying past lifespan. */
 const SENESCE_FRACTION = 0.85;
+// --- Phase 7: photosynthesis compensation ---------------------------------------------------------
+// With the day/night cycle, plants only grow during the daylight window and light follows a cosine arc, so
+// the time-averaged growth multiplier vs. the old always-light=1 sim is (DAY/CYCLE) × mean-light-in-day ×
+// mean weather fertility ≈ 0.706 × 0.5 × 1.08 ≈ 0.38 — a ~2.6× reduction that would let grazers strip the
+// plant base faster than it regrows (Phase 7 stability tuning). The constant is set ABOVE that time-average
+// (3.5, not 2.6) on purpose: what keeps the food chain stable is not the average growth rate but the
+// POST-MOW REGROWTH TIME — a grazed plant only grows in daylight, so a mow at dusk waits out the whole night
+// before regrowth resumes, making post-mow recovery ~2–3× slower than pre-Phase-7 even at C=2.6 (20k-step
+// forensics: fruiting-plant troughs ran 40%+ deeper than pre-Phase-7; in the deepest meadow trough mice
+// switched to eating insects and stripped the insect population to zero, and marsh nectar troughs starved
+// the frogs). C=3.5 restores post-mow regrowth close to the pre-Phase-7 timescale so grazed patches recover
+// within a day or two instead of oscillating for weeks; average growth runs ~1.3× pre-Phase-7, which is
+// harmless because every herbivore is popCap-limited (the surplus just means more plants sit fruiting).
+const PHOTOSYNTH_COMPENSATION = 3.5;
 
 export interface SimOptions {
-  /** Light hook: () => multiplier in [0,1]. Defaults to always-1 (Phase 7 replaces with day/night). */
-  light?: () => number;
   /** Spatial grid cell size override (meters). */
   cellSize?: number;
 }
@@ -65,13 +82,29 @@ export class Sim {
   agents: Agent[] = [];
   /** Monotonic tick counter — the stepSeed for agentRand. */
   stepCount = 0;
-  /** Light hook (Phase 7 day/night curve plugs in here). */
-  light: () => number;
   readonly grid: SpatialGrid;
   /** Per-species population counts, maintained incrementally (exact at all times) — breeding cap checks. */
   readonly popCounts = new Map<string, number>;
   /** Decaying carcasses (Phase 5) — NOT agents: outside the grid/population counts/renderers. */
   corpses: Corpse[] = [];
+
+  // --- Phase 7 environment cache: one sample per stepCount, shared by plants + animals --------------
+  private envCacheStep = -1;
+  private envCache: EnvSample | null = null;
+
+  /** Day/night + weather sample for the CURRENT tick (stepCount) — computed once per tick and cached.
+   *  Plants read light/fertilityMult from it in step(); animals read metabolismMult (drain) and
+   *  temperature (breeding cold-snap gate) from base.ts. Recomputes automatically if stepCount is set by
+   *  hand between steps (controlled checks). */
+  get environment(): EnvSample {
+    if (this.envCache === null || this.envCacheStep !== this.stepCount) {
+      const s = sampleEnvironment(this.world.seed, this.stepCount);
+      this.envCache = s;
+      this.envCacheStep = this.stepCount;
+      return s;
+    }
+    return this.envCache;
+  }
 
   private nextId = 1;
   /** id → live agent: a DENSE array because ids are assigned sequentially from 1 and never reused.
@@ -119,7 +152,6 @@ export class Sim {
   constructor(world: World, opts?: SimOptions) {
     initCorpseSystem(); // idempotent — wires the death→corpse hook (see corpses.ts for why not at module load)
     this.world = world;
-    this.light = opts?.light ?? (() => 1);
     this.grid = new SpatialGrid(opts?.cellSize ?? SIM_CELL_SIZE, 8192);
   }
 
@@ -169,7 +201,7 @@ export class Sim {
    * plant is ever left un-stepped. The dense species cache makes the per-agent kind check cheap.
    */
   step(): void {
-    const light = this.light();
+    const env = this.environment; // Phase 7: day/night + weather sample for this tick (cached — one compute per tick)
 
     // 1) Rebuild the spatial hash from all live agent positions (plants + animals).
     let n = this.agents.length;
@@ -189,7 +221,7 @@ export class Sim {
     for (let i = 0; i < n; i++) {
       const a = this.agents[i];
       if (!this.isAlive(a)) continue;
-      const alive = this.spByIdArr[a.id]?.kind === 'animal' ? updateAnimal(this, a) : updatePlant(this, a, light);
+      const alive = this.spByIdArr[a.id]?.kind === 'animal' ? updateAnimal(this, a) : updatePlant(this, a, env.light, env.fertilityMult);
       if (alive) this.agents[w++] = a;
       else this.removeAgent(a);
     }
@@ -254,10 +286,11 @@ export class Sim {
 
 /**
  * Advance one plant by a tick. Mutates the agent; returns true if it survives, false if it dies (old age
- * or starvation). Growth = baseRate × fertility(biome) × light(); fruiting plants hold their yield until
- * grazed; senescent plants wither toward death.
+ * or starvation). Growth = baseRate × PHOTOSYNTH_COMPENSATION × fertility(biome) × light(day/night) ×
+ * weatherFertility(rain boost); fruiting plants hold their yield until grazed; senescent plants wither
+ * toward death. `light` and `weatherFertility` are the per-tick environment sample (see Sim.environment).
  */
-function updatePlant(sim: Sim, a: Agent, light: number): boolean {
+function updatePlant(sim: Sim, a: Agent, light: number, weatherFertility: number): boolean {
   const sp = sim.speciesOf(a.id); // dense cache — avoids the registry Map lookup for ~13k plants per tick
   if (!sp || sp.kind !== 'plant') return true; // defensive — step() routes animals to updateAnimal
   const ps = sp as PlantSpecies;
@@ -272,7 +305,7 @@ function updatePlant(sim: Sim, a: Agent, light: number): boolean {
 
   const until = a.data?.pollinatedUntil; // pollination boost window active? (see pollinatePlant)
   const boosted = until !== undefined && sim.stepCount < until;
-  const fert = BIOME_FERTILITY[sim.world.biomeAt(a.pos.x, a.pos.z)] ?? 1;
+  const biomeFert = BIOME_FERTILITY[sim.world.biomeAt(a.pos.x, a.pos.z)] ?? 1;
   if (a.state === STAGE_SENESCENCE) {
     // Withering: slowly lose biomass toward death.
     a.energy -= ps.baseGrowthRate * 0.5;
@@ -281,7 +314,7 @@ function updatePlant(sim: Sim, a: Agent, light: number): boolean {
     // Seedling / growing / regrowth: gain biomass from light toward max. A pollinated FRUITING plant also
     // keeps setting new fruit for the boost window — that extra climb is its yield gain over a control.
     const mult = boosted ? POLLINATE_GROWTH_MULT : 1;
-    a.energy += ps.baseGrowthRate * fert * light * mult;
+    a.energy += ps.baseGrowthRate * PHOTOSYNTH_COMPENSATION * biomeFert * light * weatherFertility * mult;
     if (a.energy > ps.maxEnergy) a.energy = ps.maxEnergy;
   }
 

@@ -24,7 +24,6 @@ import { registerSpecies } from '../../registry';
 import type { AnimalSpecies } from './base';
 import { animalEnergyMax, attemptMate, canAttemptBreed, pickWanderTarget, PLANT_MIN_EDIBLE_FRACTION } from './base';
 import { aquaticSettle, aquaticSteerToward, aquaticValidTarget, isBadTarget } from './aquatic';
-import { getSpecies } from '../../registry';
 import type { Agent, PlantSpecies } from '../../types';
 import { ANIMAL_STATE_MATE, ANIMAL_STATE_SEEK_FOOD, ANIMAL_STATE_WANDER, STAGE_FRUITING } from '../../types';
 import type { Sim } from '../../sim';
@@ -132,7 +131,7 @@ function seekShoreFood(sim: Sim, a: Agent, radius: number): Agent | null {
     const p = sim.agentById(id);
     if (!p || p.id === a.id || p.energy <= 0) continue; // self is never food
     if (isBadTarget(a, sim, p.id)) continue; // recently clamped against — skip for the cooldown window
-    const ps = getSpecies(p.species);
+    const ps = sim.speciesOf(p.id); // dense cache — per-candidate lookups on the carp foraging path
     if (!ps) continue;
     let edible: boolean;
     if (ps.kind === 'plant') {

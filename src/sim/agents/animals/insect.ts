@@ -1,8 +1,9 @@
 /**
  * Insect (PLAN roster, Phase 4 Part B). The pollinators and prey of the ecosystem: short-lived,
  * fast, low-energy, high-fertility. Behaviour deviates from the generic grazer via the base.ts hooks:
- *   - `decide`: when hungry, seek the nearest FLOWERING/FRUITING plant (the only nectar sources) instead of
- *     any edible plant; breeding/wander reuse the shared attemptMate/pickWanderTarget helpers.
+ *   - `decide`: when hungry, seek the nearest NECTAR plant — GROWING/FRUITING/REGRGOWTH (regrowth shoots
+ *     flower in-season, so grazed patches keep offering nectar while they recover; Phase 7 stability tuning)
+ *     instead of any edible plant; breeding/wander reuse the shared attemptMate/pickWanderTarget helpers.
  *   - `feedOnTarget`: a visit takes NECTAR_BIOMASS × digestionEfficiency of energy AND calls pollinatePlant —
  *     boosting that plant's growth/yield for POLLINATE_BOOST_TICKS ticks (per-plant cooldown in sim.ts).
  * Mice eat insects as prey (mouse.preySpecies) — the base of the Phase 5 predator chain. Self-registers into
@@ -19,8 +20,7 @@
 import { registerSpecies } from '../../registry';
 import type { AnimalSpecies } from './base';
 import { animalEnergyMax, attemptMate, canAttemptBreed, pickWanderTarget } from './base';
-import { getSpecies } from '../../registry';
-import { STAGE_FRUITING, STAGE_GROWING, ANIMAL_STATE_MATE, ANIMAL_STATE_SEEK_FOOD } from '../../types';
+import { STAGE_FRUITING, STAGE_GROWING, STAGE_REGROWTH, ANIMAL_STATE_MATE, ANIMAL_STATE_SEEK_FOOD } from '../../types';
 import type { Agent } from '../../types';
 import type { Sim } from '../../sim';
 import { pollinatePlant } from '../../sim';
@@ -66,16 +66,21 @@ function insectDecide(sim: Sim, a: Agent, sp: AnimalSpecies): void {
   if (!a.data) a.data = {};
   const d = a.data;
 
-  // 1) Hungry → seek the nearest flowering/fruiting plant within sense radius (the only nectar sources).
+  // 1) Hungry → seek the nearest nectar plant within sense radius. Nectar sources are GROWING, FRUITING and
+  //    REGRGOWTH plants: regrowth shoots flower in the same season (new growth of reeds/cranberry bushes), so a
+  //    grazed patch keeps offering nectar while it recovers. Phase 7 stability tuning — with light-gated
+  //    plant growth, post-mow regrowth is slower than pre-Phase-7 and marsh nectar sources oscillate deeply;
+  //    without this, insects abandon the marsh in every trough and the marsh-bound frogs starve (20k-step
+  //    forensics: fruiting cranberries dipped to single digits while ~95% of insects left the frog zone).
   if (a.energy / animalEnergyMax(a) < sp.hungerThreshold) {
     let best: Agent | null = null;
     let bestD2 = Infinity;
     for (const id of sim.grid.query(a.pos.x, a.pos.z, sp.senseRadius)) {
       const p = sim.agentById(id);
       if (!p || p.energy <= 0) continue;
-      const ps = getSpecies(p.species);
+      const ps = sim.speciesOf(p.id); // dense cache — per-candidate lookups (600 insects × decision ticks)
       if (!ps || ps.kind !== 'plant') continue;
-      if (p.state !== STAGE_GROWING && p.state !== STAGE_FRUITING) continue; // only flowering/fruiting plants offer nectar
+      if (p.state !== STAGE_GROWING && p.state !== STAGE_FRUITING && p.state !== STAGE_REGROWTH) continue; // nectar plants
       const dx = p.pos.x - a.pos.x;
       const dz = p.pos.z - a.pos.z;
       const dist2 = dx * dx + dz * dz;
@@ -105,7 +110,7 @@ function insectDecide(sim: Sim, a: Agent, sp: AnimalSpecies): void {
 
 /** Nectar visit: feed on the flower and pollinate it (the boost applies when the plant's cooldown has elapsed). */
 function feedOnNectar(sim: Sim, _a: Agent, sp: AnimalSpecies, target: Agent): number {
-  if (target.state !== STAGE_GROWING && target.state !== STAGE_FRUITING) return 0; // grazed away since the decision
+  if (target.state !== STAGE_GROWING && target.state !== STAGE_FRUITING && target.state !== STAGE_REGROWTH) return 0; // no nectar since the decision
   pollinatePlant(sim, target);
   return NECTAR_BIOMASS * sp.digestionEfficiency;
 }

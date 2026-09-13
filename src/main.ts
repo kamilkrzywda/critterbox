@@ -16,6 +16,7 @@ import { seedLife } from './sim/seedLife';
 import { PlantRenderer } from './render/plants';
 import { AnimalRenderer } from './render/animals';
 import { initPopulationPanel, type PopRow } from './ui/population';
+import { initEnvPanel } from './ui/envPanel';
 
 const DEFAULT_SEED = 1337;
 const DEFAULT_SIZE = 300;
@@ -62,7 +63,27 @@ const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerH
 const sun = new THREE.DirectionalLight(0xffffff, 1.2);
 sun.position.set(120, 200, 80);
 scene.add(sun);
-scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+scene.add(ambient);
+
+// --- Phase 7: sky + lights follow the day/night light curve -------------------------------------
+// Cheap per-frame update (a couple of color lerps): sun intensity tracks light(t), and the sky blends
+// night → warm dawn/dusk tint → day as the light level rises. The sample comes from sim.environment, so a
+// paused sim freezes the sky too.
+const SKY_DAY = new THREE.Color(0x87ceeb);
+const SKY_NIGHT = new THREE.Color(0x0d1326);
+const SKY_DUSK = new THREE.Color(0xd98e4a); // warm dawn/dusk tint
+const skyScratch = new THREE.Color();
+
+function updateSkyAndLights(): void {
+  if (!sim) return;
+  const l = sim.environment.light;
+  sun.intensity = 0.15 + 1.05 * l; // ~0.15 at night, the original 1.2 at noon
+  ambient.intensity = 0.3 + 0.25 * l;
+  if (l <= 0.4) skyScratch.lerpColors(SKY_NIGHT, SKY_DUSK, l / 0.4);
+  else skyScratch.lerpColors(SKY_DUSK, SKY_DAY, (l - 0.4) / 0.6);
+  scene.background = skyScratch;
+}
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -138,6 +159,12 @@ if (popContainer) {
   initPopulationPanel(popContainer, rows, () => sim?.populations() ?? {});
 }
 
+// Environment indicator (Phase 7) — day/night phase + weather + temperature, refreshed ~4 Hz.
+const envContainer = document.getElementById('env-panel');
+if (envContainer) {
+  initEnvPanel(envContainer, () => sim ? sim.environment : null);
+}
+
 // --- pause (Space) ---------------------------------------------------------------------------
 
 const pausedOverlay = document.getElementById('paused-overlay');
@@ -194,6 +221,13 @@ declare global {
       populations: { [species: string]: { count: number; avgEnergy: number } };
       /** Species ids instanced by the PLANT renderer — e2e asserts this never contains an animal species. */
       plantRendererSpecies(): string[];
+      // Phase 7: day/night + weather clock (live sample of the sim's current tick)
+      tick: number;
+      timeOfDay: number; // [0,1) position within the day/night cycle
+      dayPhase: 'dawn' | 'day' | 'dusk' | 'night';
+      light: number; // [0,1]
+      temperature: number; // °C
+      weather: 'clear' | 'cloudy' | 'rain';
     };
   }
 }
@@ -217,6 +251,13 @@ window.__critterbox = {
   get agentCount() { return sim ? sim.agents.length : 0; },
   get populations() { return sim ? sim.populations() : {}; },
   plantRendererSpecies(): string[] { return plantRenderer ? plantRenderer.speciesIds() : []; },
+  // Phase 7: day/night + weather clock — live sample of the sim's current tick (frozen while paused).
+  get tick() { return tick; },
+  get timeOfDay() { return sim ? sim.environment.timeOfDay : 0; },
+  get dayPhase() { return sim ? sim.environment.phase : 'dawn'; },
+  get light() { return sim ? sim.environment.light : 0; },
+  get temperature() { return sim ? sim.environment.temperature : 15; },
+  get weather() { return sim ? sim.environment.weather : 'clear'; },
 };
 
 // --- render loop -----------------------------------------------------------------------------
@@ -241,6 +282,7 @@ function frame(now: number): void {
   } else {
     accumulator = 0; // don't bank time while paused — no burst on resume
   }
+  updateSkyAndLights(); // Phase 7: sky + sun follow the day/night light curve (cheap per-frame lerps)
   renderer.render(scene, camera);
 }
 

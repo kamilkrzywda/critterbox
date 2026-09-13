@@ -124,6 +124,12 @@ export default {
     fox.traits = midTraits(FOX);
     fox.energy = 10; // starving → keeps hunting through all three kills (well below the gate)
 
+    // Phase 7: the fox is diurnal — at dawn its activity level (~0.3) makes it abandon chases on most decision
+    // ticks, stretching "quick succession" into hundreds of ticks and letting satiation reset between kills.
+    // This check tests SATURATING INTAKE mechanics, so jump the clock to near-noon (full activity) without
+    // stepping any agent — positions/energy untouched, only the environment sample changes.
+    while (ctx.sim.environment.lightAt(sim.stepCount) < 0.95) sim.stepCount++;
+
     // Three mice in a tight cluster so each successive chase is short (kills land seconds apart).
     const spots = [[0.5, 0], [1.0, 0.3], [1.5, 0.6]];
     const sexes = ['f', 'm', 'f']; // energy gate (≥60) blocks breeding — no offspring muddying the count

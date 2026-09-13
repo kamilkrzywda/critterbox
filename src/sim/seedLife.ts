@@ -114,7 +114,18 @@ export function seedLife(sim: Sim): SeedStats {
     // synchronized wave that no dispersal rate can replace (Phase 5 stability runs showed grass/reed cohort
     // crashes). Distributed ages spread deaths over time so grazer-dispersed seedlings keep pace.
     const sp = getSpecies(speciesId);
-    if (sp?.kind === 'plant') a.age = Math.floor(ageRng() * (sp as PlantSpecies).lifespan * 0.8); // dedicated stream — see AGE_SALT
+    if (sp?.kind === 'plant') {
+      const ps = sp as PlantSpecies;
+      a.age = Math.floor(ageRng() * ps.lifespan * 0.8); // dedicated stream — see AGE_SALT
+      // Phase 7: energy consistent with age — an old seeded plant is MATURE (fruiting), not a seedling. The
+      // world now loads fully grown instead of as a field of 10%-energy seedlings, and nectar/browse sources
+      // exist from tick 1: the sim starts at dawn (light ≈ 0), so with all-seedling plants no GROWING/FRUITING
+      // nectar source existed until light rose ~400 ticks in — nectar-dependent insects starved before the
+      // first fruiting plant appeared, cascading into frog extinction (Phase 7 stability forensics). The map
+      // keeps age=0 → seedling fraction and the max drawn age (0.8×lifespan) → just past every species'
+      // fruiting threshold (≤ 0.82 vs thresholds 0.7–0.8), so no plant starts senescent (senescence ≥ 0.85).
+      a.energy = ps.maxEnergy * (0.1 + 0.9 * (a.age / ps.lifespan));
+    }
     perSpecies[speciesId] = (perSpecies[speciesId] ?? 0) + 1;
     total++;
   };

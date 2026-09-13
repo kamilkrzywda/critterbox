@@ -56,13 +56,24 @@
       .pop-name { opacity: 0.95; }
       .pop-count { font-variant-numeric: tabular-nums; }
       .pop-avg { opacity: 0.7; min-width: 34px; text-align: right; }
+      #env-panel {
+        position: fixed; top: 96px; left: 16px; width: auto;
+        color: #fff; font-family: system-ui, sans-serif; font-size: 13px;
+        background: rgba(20, 28, 24, 0.75); border-radius: 8px; padding: 8px 12px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); user-select: none; pointer-events: none;
+        display: flex; gap: 10px; align-items: baseline;
+      }
+      #env-panel .env-phase { font-weight: 600; text-transform: capitalize; }
+      #env-panel .env-weather { opacity: 0.9; }
+      #env-panel .env-temp { opacity: 0.7; font-variant-numeric: tabular-nums; }
     </style>
   </head>
   <body>
     <div id="overlay">
       <h1 id="title">Critterbox</h1>
-      <p id="subtitle">v0.5.0 — living ecosystem: plants & herbivores on a procedural world</p>
+      <p id="subtitle">v0.8.0 — living ecosystem under day/night & weather on a procedural world</p>
     </div>
+    <div id="env-panel"></div>
     <div id="population-panel">
       <div class="pop-title">Population</div>
     </div>

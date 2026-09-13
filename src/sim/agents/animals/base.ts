@@ -6,7 +6,8 @@
  * species table + per-agent traits — no brains (PLAN "Traits & inheritance").
  *
  * Energy budget (Bibites master constraint), one 0–100-scale store per agent:
- *   - metabolism drain per tick = baseMetabolism × metabolism trait × temperature hook (Phase 7; 1.0 now)
+ *   - metabolism drain per tick = baseMetabolism × metabolism trait × environment.metabolismMult (Phase 7:
+ *     cold → up to METAB_MULT_MAX, see sim/environment.ts)
  *   - movement cost per meter moved (moveCostPerMeter)
  *   - eating gives a digestion gain (eaten biomass × digestionEfficiency, via the plant graze API)
  *   - breeding spends BREED_COST_FRACTION of EACH parent's energy; the offspring starts with half of
@@ -41,8 +42,11 @@
  *     on arrival the animal feeds via Sim.scavengeAt (see sim/corpses.ts) — cheaper than hunting (no pursuit).
  *   - `validTarget` hook: species may validate WANDER targets against the biome/height field (frogs and
  *     storks stay in marsh/water-edge zones); prey pursuit is exempt so they can still catch edge-dwelling
- *     prey. `activityLevel` hook: returns the current activity multiplier (1.0 for now — Phase 7 wires
- *     light → activity, e.g. owls hunt at night only; hunting requires activity > 0).
+ *     prey. `activityLevel(sim)` hook (Phase 7): returns the current activity multiplier in [0,1] from the
+ *     day/night light — owls are nocturnal (high at night), fox/stork diurnal (reduced at night). Hunting
+ *     requires activity > 0; below-full activity means the animal only forages on a FRACTION of its decision
+ *     ticks (deterministic per id+tick via agentRand) — so "reduced activity" is a reduced hunting RATE, not
+ *     just an on/off switch.
  */
 
 import { agentGaussian, agentRand } from '../../rng';
@@ -50,6 +54,7 @@ import type { Agent, PlantSpecies, Sex, Species } from '../../types';
 import { ANIMAL_STATE_EAT, ANIMAL_STATE_IDLE, ANIMAL_STATE_MATE, ANIMAL_STATE_SEEK_FOOD, ANIMAL_STATE_WANDER, STAGE_FRUITING } from '../../types';
 import { getSpecies } from '../../registry';
 import { clampEnergy, metabolismDrain } from '../../energy';
+import { BREED_TEMP_MIN } from '../../environment';
 import type { Sim } from '../../sim';
 import { grazePlant } from '../../sim';
 
@@ -63,6 +68,10 @@ export const INITIAL_ANIMAL_ENERGY_FRACTION = 0.6;
 export const BREED_COST_FRACTION = 0.3;
 /** Ticks between behaviour decisions, staggered by agent id ((stepCount + id) % DECISION_EVERY === 0). */
 export const DECISION_EVERY = 5;
+/** Salt for the Phase 7 activity probability gate (decide/scavengerDecide): below-full activityLevel →
+ *  foraging is attempted only when agentRand(id, step, salt) < activity. Exported so scavengerDecide reuses
+ *  the exact same draw as the generic decide. */
+export const ACTIVITY_SALT = 0x7a2c;
 // --- Saturating intake (Phase 5, Holling-type) -----------------------------------------------
 /** A kill that fills this fraction of the predator's capacity adds a full point of satiation — smaller
  *  meals add proportionally less (gained / (capacity × SAT_FULL_MEAL_FRACTION)). This keeps the effect
@@ -138,9 +147,10 @@ export interface AnimalSpecies extends Species {
   /** Optional WANDER-target validation against the biome/height field (frogs/storks stay in marsh/water-edge).
    *  Prey pursuit is exempt — a frog may still chase an insect that strays upland. */
   validTarget?: (sim: Sim, x: number, z: number) => boolean;
-  /** Activity hook (Phase 5/7): current activity multiplier in [0,1]; hunting requires > 0. Returns 1.0 for
-   *  diurnal species by default (unset); Phase 7 wires light → activity so owls hunt at night only. */
-  activityLevel?: () => number;
+  /** Activity hook (Phase 7): current activity multiplier in [0,1] from the day/night light — e.g. owls are
+   *  nocturnal (`1 − light`), fox/stork diurnal (reduced at night). Hunting requires > 0; below-full values
+   *  reduce the hunting RATE (probability gate on decision ticks, see decide/scavengerDecide). Unset = always 1. */
+  activityLevel?: (sim: Sim) => number;
   /** Optional post-act position fixup (Phase 6 aquatic): called once per tick after the act phase, before
    *  the survival return. Fish use it to clamp back into the river volume when a move dried out and to sit
    *  at their depth fraction of the water column. Returns true when the agent's position was clamped — the
@@ -183,11 +193,6 @@ export function visualScale(sp: AnimalSpecies, sizeTrait: number): number {
   const f = (sizeTrait - t.min) / (t.max - t.min);
   const clamped = f < 0 ? 0 : f > 1 ? 1 : f; // defensive — traits are always within bounds
   return VISUAL_SCALE_MIN + (VISUAL_SCALE_MAX - VISUAL_SCALE_MIN) * clamped;
-}
-
-/** Temperature hook — Phase 7 swaps in the weather curve; returns 1.0 for now. */
-function temperatureMod(): number {
-  return 1;
 }
 
 // --- death hooks -------------------------------------------------------------------------------
@@ -262,14 +267,16 @@ function inCooldown(sim: Sim, a: Agent, sp: AnimalSpecies): boolean {
 /**
  * Try to breed two animals of the same species. All gates must pass on BOTH parents: opposite sex,
  * mature (age > maturityAge), energy ≥ breedEnergyFraction × capacity, cooldown elapsed, within
- * matingRange, and the species below its popCap. On success each parent spends BREED_COST_FRACTION of
- * its energy; an offspring spawns at their midpoint with half of the total spend as starting energy,
- * inherited traits (mean + mutation) and a 50/50 sex. Returns true when it bred.
+ * matingRange, and the species below its popCap — plus the Phase 7 cold-snap gate: breeding is suppressed
+ * while the environment temperature is below BREED_TEMP_MIN (°C). On success each parent spends
+ * BREED_COST_FRACTION of its energy; an offspring spawns at their midpoint with half of the total spend as
+ * starting energy, inherited traits (mean + mutation) and a 50/50 sex. Returns true when it bred.
  */
 export function tryBreed(sim: Sim, a: Agent, b: Agent, sp: AnimalSpecies): boolean {
   if (a.id === b.id || a.species !== b.species) return false;
   if (!a.sex || !b.sex || a.sex === b.sex) return false; // opposite sex required
   if (a.age <= sp.maturityAge || b.age <= sp.maturityAge) return false;
+  if (sim.environment.temperature < BREED_TEMP_MIN) return false; // cold-snap gate (Phase 7): no breeding below the threshold
   if (a.energy < sp.breedEnergyFraction * animalEnergyMax(a)) return false;
   if (b.energy < sp.breedEnergyFraction * animalEnergyMax(b)) return false;
   if (inCooldown(sim, a, sp) || inCooldown(sim, b, sp)) return false;
@@ -320,8 +327,8 @@ export function updateAnimal(sim: Sim, a: Agent): boolean {
     return false; // old age
   }
 
-  // --- metabolism drain (temperature hook → Phase 7) ---------------------------------------------
-  a.energy -= metabolismDrain(as_.baseMetabolism * (t.metabolism ?? 1), temperatureMod());
+  // --- metabolism drain (Phase 7: cold raises the multiplier — see sim/environment.ts) --------------
+  a.energy -= metabolismDrain(as_.baseMetabolism * (t.metabolism ?? 1), sim.environment.metabolismMult);
 
   // --- satiation decay (Phase 5): the "short window" of saturating intake shrinks every tick -------
   const mem0 = a.data;
@@ -425,9 +432,20 @@ function decide(sim: Sim, a: Agent, sp: AnimalSpecies): void {
   const d = a.data;
 
   // 1) Hungry AND active → seek the nearest edible plant or prey animal within sense radius.
-  //    The activityLevel hook (Phase 7: light → activity, e.g. owls hunt at night only) gates hunting.
-  const active = sp.activityLevel ? sp.activityLevel() : 1;
+  //    The activityLevel hook (Phase 7: light → activity — owls nocturnal, fox/stork diurnal) gates hunting;
+  //    below-full activity reduces the hunting RATE instead of switching it off: foraging is attempted only on
+  //    a FRACTION of decision ticks (deterministic per id+tick via agentRand). On skipped ticks a hungry
+  //    animal RESTS in place (no patrol burn) — see the gate below.
+  const active = sp.activityLevel ? sp.activityLevel(sim) : 1;
   if (active > 0 && a.energy / animalEnergyMax(a) < sp.hungerThreshold) {
+    if (!(active >= 1 || agentRand(a.id, sim.stepCount, ACTIVITY_SALT) < active)) {
+      // Phase 7: hungry but below full activity — REST in place instead of patrolling. A predator that
+      // can't hunt right now waits for prey to come within sense radius on its next active tick; a random
+      // patrol would burn movement energy without hunting (Phase 7 stability tuning — the wasted-wander
+      // drain is what tipped fox/stork energy budgets negative under compressed hunting windows). Any
+      // pending target from an earlier decision keeps being pursued by the act phase.
+      return;
+    }
     const best = seekNearestFood(sim, a, sp);
     if (best) {
       d.tx = best.pos.x;
@@ -493,7 +511,7 @@ export function seekNearestFood(sim: Sim, a: Agent, sp: AnimalSpecies, radius?: 
   for (const id of sim.grid.query(a.pos.x, a.pos.z, radius ?? sp.senseRadius)) {
     const p = sim.agentById(id);
     if (!p || p.id === a.id || p.energy <= 0) continue; // self is never food
-    const ps = getSpecies(p.species);
+    const ps = sim.speciesOf(p.id); // dense cache — per-candidate lookups on the hottest animal path (Phase 7 perf: seasonal foraging made this loop ~2× busier)
     if (!ps) continue;
     let edible: boolean;
     if (ps.kind === 'plant') {
