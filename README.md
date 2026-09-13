@@ -1,4 +1,4 @@
-# Critterbox
+# [Critterbox](https://kamilkrzywda.github.io/critterbox/)
 
 Browser-based 3D animal-ecosystem simulation: a procedurally generated heightmap world with biomes where every plant and animal is an individual agent with stats (energy, age, sex, heritable traits), living out a full food chain. No cellular automata, no physics — pure continuous agent simulation on CPU. Theme: Polish fauna.
 
