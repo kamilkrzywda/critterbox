@@ -23,6 +23,7 @@ import { initEnvPanel } from './ui/envPanel';
 import { initInspectorPanel } from './ui/inspector';
 import { restoreWorld, type RestoreResult } from './save/restore';
 import { loadStateInfo, requestStoragePersistence, saveNow, startAutosave } from './save/save';
+import { getSpecies } from './sim/registry';
 import type { Agent } from './sim/types';
 
 const DEFAULT_SEED = 1337;
@@ -140,6 +141,8 @@ function buildWorld(seed: number, size: number): World {
   scene.add(animalRenderer.object);
 
   selectedId = null; // ids restart at 1 in the new world — a stale selection would highlight an unrelated agent
+  stopFollow(); // same for the follow-camera — its target id belongs to the old world
+  hoveredAgentId = null; // and the hover preview
   setHoveredSpecies(null); // same for the hover layer — its rings point at the old world's agents
   frameWorld(world.size);
   refreshPanel?.(world.seed, world.size);
@@ -270,11 +273,67 @@ function stepSim(): void {
 
 let selectedId: number | null = null;
 
-/** Select a live agent by id (null → deselect). Dead/unknown ids deselect instead of erroring. */
+/** Select a live agent by id (null → deselect). Dead/unknown ids deselect instead of erroring.
+ *  Selecting an ANIMAL also starts the follow-camera (plants are stationary — nothing to follow);
+ *  selecting a plant or deselecting stops it. */
 function selectAgentById(id: number | null): void {
   if (id !== null && !(sim?.agentById(id))) id = null; // dead/absent — or no world yet
   selectedId = id;
+  if (id === null) { stopFollow(); return; }
+  const a = sim!.agentById(id);
+  if (a && getSpecies(a.species)?.kind === 'animal') startFollow(id);
+  else stopFollow(); // plants are stationary — nothing to follow
 }
+
+// --- follow-camera: clicking an animal makes the camera track it ----------------------------------
+// The camera keeps a FIXED view offset from a SMOOTHED copy of the agent's position: each frame the
+// smoothed target lerps toward the live position with an exponential time constant (~0.3 s), so the
+// jerky wander/seek behaviour reads as a gentle glide instead of a jitter. Any user POSITION input
+// (WASD/wheel) cancels follow — look/orbit stays free, so you can circle around a followed animal.
+// The selection itself is untouched: Esc / empty-click deselect AND stop following; the agent dying or
+// a world rebuild clears it too.
+const FOLLOW_LAMBDA = 3; // smoothing rate (1/s) — higher = tighter follow, lower = lazier glide
+let followId: number | null = null;
+const followTarget = new THREE.Vector3(); // smoothed copy of the followed agent's position
+const followOffset = new THREE.Vector3(); // fixed camera-minus-target view vector for this session
+
+function startFollow(id: number): void {
+  const a = sim?.agentById(id);
+  if (!a) return;
+  const camPos = flight.pos;
+  if (followId === null) {
+    // Fresh session: capture the current view offset so the camera doesn't jump on the first frame.
+    followTarget.set(a.pos.x, a.pos.y, a.pos.z);
+    followOffset.set(camPos[0] - a.pos.x, camPos[1] - a.pos.y, camPos[2] - a.pos.z);
+  } else {
+    // Re-target mid-session: keep the offset, but re-seat the smoothed target so desired == current
+    // camera position (no jump) and it glides over to the new agent.
+    followTarget.set(camPos[0] - followOffset.x, camPos[1] - followOffset.y, camPos[2] - followOffset.z);
+  }
+  followId = id;
+}
+
+function stopFollow(): void {
+  followId = null;
+}
+
+/** Per-frame: glide the camera to (smoothed target + fixed offset), or clear when the agent dies. */
+const followScratch = new THREE.Vector3();
+function updateFollow(dt: number): void {
+  if (followId === null) return;
+  const a = sim?.agentById(followId);
+  if (!a) { stopFollow(); return; } // died or world rebuilt — the selection marker clears selectedId too
+  followScratch.set(a.pos.x, a.pos.y, a.pos.z);
+  followTarget.lerp(followScratch, 1 - Math.exp(-FOLLOW_LAMBDA * dt)); // frame-rate independent damping
+  flight.setPos(
+    followTarget.x + followOffset.x,
+    followTarget.y + followOffset.y,
+    followTarget.z + followOffset.z,
+  );
+}
+
+// The user taking over POSITION control cancels follow; look/orbit is allowed (see camera.onUserInput).
+flight.onUserInput = (kind) => { if (kind === 'move') stopFollow(); };
 
 const selectionMarker = new THREE.Mesh(
   new THREE.TorusGeometry(2, 0.15, 8, 32),
@@ -312,12 +371,55 @@ function setHoveredSpecies(id: string | null): void {
   hoverLayer.setSpecies(id); // clearing zeroes the instances immediately, no frame needed
 }
 
-// Click-pick: a pointerup within 5 px of the pointerdown is a click (anything longer is a camera drag).
+// Pick: a pointerup within 5 px of the pointerdown is a CLICK (anything longer is a camera drag). The
+// same pick path serves HOVER too (pointermove → inspector preview), throttled to ~20 Hz and ≥4 px of
+// pointer travel. Picking is PROXIMITY-based, not a geometry raycast: each agent counts as a vertical
+// line at its position with a per-species radius — tiny grass instances are ~10 cm wide, so a single-pixel
+// ray misses them ~98% of the time and hover-inspect over a meadow would be a lottery. Nearest along the
+// ray wins across ALL agents; O(n) simple math per pick (n ≈ 10⁴–10⁵), trivial at the throttle rate.
+const PICK_RADIUS_PLANT = 1.0; // m — hovering the meadow finds grass/clover/reed
+const PICK_RADIUS_TREE = 2.5; // m — canopies are big
+const PICK_RADIUS_ANIMAL = 0.8; // m — floored so tiny mice stay pickable
+
 const pickRaycaster = new THREE.Raycaster();
 const pickNdc = new THREE.Vector2();
+
+/** Nearest agent under the given client coords (null over empty space/water). See the note above for why
+ *  this is a proximity test against vertical lines instead of an instanced-mesh raycast. */
+function pickAgentAtClient(x: number, y: number): Agent | null {
+  if (!sim) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  pickNdc.set(((x - rect.left) / rect.width) * 2 - 1, -((y - rect.top) / rect.height) * 2 + 1);
+  pickRaycaster.setFromCamera(pickNdc, camera);
+  const O = pickRaycaster.ray.origin;
+  const D = pickRaycaster.ray.direction; // normalized by setFromCamera
+  let best: Agent | null = null;
+  let bestT = Infinity;
+  for (const a of sim.agents) {
+    const sp = getSpecies(a.species);
+    const radius = sp?.kind === 'plant' ? (a.species === 'tree' ? PICK_RADIUS_TREE : PICK_RADIUS_PLANT) : PICK_RADIUS_ANIMAL;
+    // Closest approach between the pick ray and the vertical line at the agent's position.
+    let t: number; // distance along the ray to the closest point
+    let h2: number; // squared horizontal distance from that point to the line
+    const ox = O.x - a.pos.x, oz = O.z - a.pos.z;
+    const dxy = D.x * D.x + D.z * D.z;
+    if (dxy > 1e-4) { // not looking straight down — solve in the XZ plane
+      t = -(ox * D.x + oz * D.z) / dxy;
+      h2 = (ox + D.x * t) ** 2 + (oz + D.z * t) ** 2;
+    } else { // looking straight down — the ray is itself a vertical line at O's XZ position
+      t = (a.pos.y - O.y) / D.y;
+      h2 = ox * ox + oz * oz;
+    }
+    if (t < 0.5 || h2 > radius * radius) continue; // behind the camera, or too far from the pointer line
+    const hy = O.y + D.y * t; // hit-point height — must be within the agent's body extent (feet at pos.y)
+    if (hy < a.pos.y - 0.5 || hy > a.pos.y + 3) continue;
+    if (t < bestT) { bestT = t; best = a; } // nearest along the ray wins
+  }
+  return best;
+}
+
 let downX = 0;
 let downY = 0;
-
 renderer.domElement.addEventListener('pointerdown', (e) => {
   downX = e.clientX;
   downY = e.clientY;
@@ -325,21 +427,41 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (!booted || !sim) return; // no world yet — nothing to pick
   if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return; // a drag is camera movement, not a pick
-  const rect = renderer.domElement.getBoundingClientRect();
-  pickNdc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
-  pickRaycaster.setFromCamera(pickNdc, camera);
-  const pa = plantRenderer?.pickAgent(pickRaycaster) ?? null;
-  const aa = animalRenderer?.pickAgent(pickRaycaster) ?? null;
-  let hit: { agent: Agent; distance: number } | null = null;
-  if (pa && (!aa || pa.distance < aa.distance)) hit = pa; // nearest across BOTH renderers wins
-  else if (aa) hit = aa;
-  selectAgentById(hit ? hit.agent.id : null); // empty click → deselect
+  const hit = pickAgentAtClient(e.clientX, e.clientY);
+  selectAgentById(hit ? hit.id : null); // empty click → deselect
 });
 
-// Inspector side panel — renders whatever is selected, ~10 Hz (see ui/inspector.ts).
+// --- hover-inspect: pointer over an agent previews it in the inspector -----------------------------
+let hoveredAgentId: number | null = null;
+let lastPickX = -Infinity;
+let lastPickY = -Infinity;
+let lastPickTime = 0;
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (!booted || !sim) return; // no world yet — nothing to pick
+  const now = performance.now();
+  if (now - lastPickTime < 50) return; // ~20 Hz cap — the raycast is O(instances) per species mesh
+  if (Math.hypot(e.clientX - lastPickX, e.clientY - lastPickY) < 4) return; // ignore sub-pixel jitter
+  lastPickTime = now;
+  lastPickX = e.clientX;
+  lastPickY = e.clientY;
+  const hit = pickAgentAtClient(e.clientX, e.clientY);
+  hoveredAgentId = hit ? hit.id : null;
+});
+// Leaving the canvas (e.g. onto a HUD panel) clears the preview — otherwise it would go stale.
+renderer.domElement.addEventListener('pointerleave', () => { hoveredAgentId = null; });
+
+// Inspector side panel — HOVERED agent first (a live preview), else the SELECTED one; ~10 Hz (ui/inspector.ts).
 const inspContainer = document.getElementById('inspector-panel');
 if (inspContainer) {
-  initInspectorPanel(inspContainer, () => (selectedId !== null && sim ? sim.agentById(selectedId) ?? null : null));
+  initInspectorPanel(inspContainer, () => {
+    const s = sim;
+    if (!s) return null;
+    if (hoveredAgentId !== null) {
+      const a = s.agentById(hoveredAgentId); // dead hover target → fall through to the selection
+      if (a) return a;
+    }
+    return selectedId !== null ? s.agentById(selectedId) ?? null : null;
+  });
 }
 
 // --- debug surface (assigned at the END of boot — its presence means "world ready") -----------
@@ -382,6 +504,12 @@ declare global {
       selectAgent(id?: number | null): void;
       /** Currently selected agent id, or null when nothing is selected. */
       selected: number | null;
+      /** Agent id under the pointer (hover-inspect), or null when nothing is hovered. */
+      hoveredAgent: number | null;
+      /** Agent id the camera is currently following (an animal selection), or null. */
+      following: number | null;
+      /** World position of a live agent — e2e uses it to verify the follow-camera tracks its target. */
+      agentPos(id: number): [number, number, number] | null;
       // v0.10: species-hover highlight surface (population-row hover without real mouse events)
       /** Set the hovered population-row species (null/undefined → clear). Drives the ring layer directly. */
       hoverSpecies(id?: string | null): void;
@@ -452,6 +580,12 @@ async function boot(): Promise<void> {
     setSpeed(x: number): void { setSimSpeed(typeof x === 'number' && Number.isFinite(x) ? x : 1); },
     selectAgent(id?: number | null): void { selectAgentById(id ?? null); },
     get selected() { return selectedId; },
+    get hoveredAgent() { return hoveredAgentId; },
+    get following() { return followId; },
+    agentPos(id: number): [number, number, number] | null {
+      const a = sim?.agentById(id);
+      return a ? [a.pos.x, a.pos.y, a.pos.z] : null;
+    },
     // v0.10: species-hover highlight surface.
     hoverSpecies(id?: string | null): void { setHoveredSpecies(typeof id === 'string' ? id : null); },
     get hoveredSpecies() { return hoveredSpecies; },
@@ -476,6 +610,7 @@ function frame(now: number): void {
   if (dt > 0.25) dt = 0.25; // clamp after tab switches — no giant catch-up bursts
 
   flight.update(dt); // camera always flies, even while the sim is paused
+  updateFollow(dt); // follow-camera glides toward the followed animal (no-op unless following)
   if (!frozen()) {
     accumulator += dt * simSpeed; // Phase 8: speed multiplier (0× = frozen, up to 8×) applied here
     let steps = 0;

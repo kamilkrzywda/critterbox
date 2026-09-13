@@ -2,9 +2,15 @@
 
 All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 
-## [Unreleased]
+## [0.11.0] - 2026-09-13
+
+### Added
+- Hover-inspect: moving the pointer over any plant or animal previews it in the inspector panel (the hovered agent takes priority; leaving falls back to the selected one, or hides when nothing is selected). The click-pick raycast was factored into a shared `pickAgentAtClient` used by both paths; hover picks are throttled to ~20 Hz and ≥4 px of pointer travel because `pickAgent` is O(instances) per species mesh
+- Follow-camera: clicking an ANIMAL (or `selectAgent` on one) makes the camera track it — a fixed view offset from a smoothed copy of its position, damped with a frame-rate-independent exponential lerp (λ = 3, ~0.3 s time constant) so jerky wander/seek reads as a gentle glide. Plants don't follow (nothing to track). Any user POSITION input (WASD/wheel) cancels follow — look/orbit stays free, so you can circle a followed animal; Esc / empty-click deselect and stop following; the agent dying or a world rebuild clears it too. `FreeFlightCamera` gained an `onUserInput('move' | 'look')` callback for this
+- Debug surface additions: `hoveredAgent`, `following`, `agentPos(id)` — new e2e spec (`e2e/follow.spec.ts`) covers the hover preview (real pointer moves over a deterministic world) and follow semantics (animal → following set + camera tracks with offset preserved; plant → no follow; Esc clears)
 
 ### Changed
+- All HUD text unified to lowercase: inspector parameter labels (species/sex/age/energy/state/position), every species display name in the population panel + inspector, panel titles, world-panel labels and the "new world" button — reads consistently with the new console monospace font. The env indicator's `text-transform: capitalize` is gone (phase/weather were already lowercase strings)
 - Population panel rows now render as a proper 3-column CSS grid (`minmax(0, 1fr) auto auto`) instead of free-flowing flex: name left (ellipsis on overflow), count and avg-energy right-aligned with `tabular-nums` so all digits have uniform width and every row's columns line up vertically. Rows also gained a subtle hover highlight (rgba(255,255,255,0.1) background, 80 ms transition) complementing the existing hover-to-highlight-species behavior — the mouseover/mouseout delegation on `.pop-row` + `dataset.species` is untouched
 
 ## [0.10.0] - 2026-09-13

@@ -48,6 +48,11 @@ export class FreeFlightCamera {
   private lastX = 0;
   private lastY = 0;
 
+  /** Fired whenever the USER drives the camera (not programmatic setPos): 'move' for WASD/wheel
+   *  position changes, 'look' for drag/arrow rotation. The follow-camera uses this to step aside when
+   *  the user takes over position control while keeping look free (orbit around a followed animal). */
+  onUserInput?: (kind: 'move' | 'look') => void;
+
   constructor(camera: THREE.PerspectiveCamera, canvas: HTMLElement) {
     this.camera = camera;
     this.canvas = canvas;
@@ -113,6 +118,7 @@ export class FreeFlightCamera {
     if (this.keys.has('ArrowDown')) dpitch -= ARROW_ROT_SPEED * dt;
     this.rot.yaw += dyaw;
     this.rot.pitch = clampPitch(this.rot.pitch + dpitch);
+    if ((dyaw !== 0 || dpitch !== 0) && this.onUserInput) this.onUserInput('look');
 
     const shift = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     const step = MOVE_SPEED * (shift ? SHIFT_MULT : 1) * dt;
@@ -126,6 +132,7 @@ export class FreeFlightCamera {
     this.pos3.x += mx * step;
     this.pos3.y += my * step;
     this.pos3.z += mz * step;
+    if ((mx !== 0 || my !== 0 || mz !== 0) && this.onUserInput) this.onUserInput('move');
 
     this.apply();
   }
@@ -162,6 +169,7 @@ export class FreeFlightCamera {
     this.lastY = e.clientY;
     this.rot.yaw -= dx * LOOK_SENSITIVITY; // drag right → look right
     this.rot.pitch = clampPitch(this.rot.pitch - dy * LOOK_SENSITIVITY); // drag down → look down
+    if ((dx !== 0 || dy !== 0) && this.onUserInput) this.onUserInput('look');
     this.apply();
   };
 
@@ -181,6 +189,7 @@ export class FreeFlightCamera {
     this.pos3.x += -Math.sin(this.rot.yaw) * cp * dist;
     this.pos3.y += sp * dist;
     this.pos3.z += -Math.cos(this.rot.yaw) * cp * dist;
+    if (dist !== 0 && this.onUserInput) this.onUserInput('move'); // dolly changes the view distance — follow steps aside
     this.apply();
   };
 
