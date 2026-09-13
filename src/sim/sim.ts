@@ -144,6 +144,36 @@ export class Sim {
     if (sp?.kind === 'animal') notifyAnimalDeath(this, a); // death hook → corpse at the victim's position
     this.removeAgent(a);
   }
+
+  /**
+   * Restore a saved agent list (Phase 8 save/load): replaces the live agents + corpses and rebuilds the
+   * dense by-id tables + population counts from scratch. Saved ids are kept verbatim (never renumbered) —
+   * nextId advances past them so new births never collide. `step` restores the tick counter, which keeps
+   * the deterministic per-agent hash-randomness sequence continuous across a save/load cycle; the cached
+   * environment sample is invalidated since it's keyed on stepCount. Unknown species in a corrupt save are
+   * skipped (not fatal) — the sim stays consistent with whatever actually loaded.
+   */
+  loadState(agents: Agent[], corpses: Corpse[], step: number): void {
+    this.agents = agents.slice(); // take a copy — the caller's snapshot stays intact
+    let maxId = 0;
+    for (const a of this.agents) if (a.id > maxId) maxId = a.id;
+    const byId: (Agent | undefined)[] = new Array(maxId + 1).fill(undefined);
+    const spById: (Species | undefined)[] = new Array(maxId + 1).fill(undefined);
+    this.popCounts.clear();
+    for (const a of this.agents) {
+      const sp = getSpecies(a.species);
+      if (!sp) continue; // defensive — unknown species in a corrupt save is skipped, not fatal
+      byId[a.id] = a;
+      spById[a.id] = sp;
+      this.popCounts.set(sp.id, (this.popCounts.get(sp.id) ?? 0) + 1);
+    }
+    this.byIdArr = byId;
+    this.spByIdArr = spById;
+    this.nextId = maxId + 1;
+    this.corpses = corpses.slice();
+    this.stepCount = step;
+    this.envCacheStep = -1; // force a fresh environment sample on the next tick (keyed on stepCount)
+  }
   // Reusable scratch buffers for the per-tick grid rebuild (no allocation churn).
   private bufIds = new Int32Array(0);
   private bufXs = new Float32Array(0);

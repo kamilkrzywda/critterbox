@@ -11,6 +11,7 @@
     "sim-check": "node scripts/sim-check.mjs"
   },
   "dependencies": {
+    "fflate": "^0.8.3",
     "three": "^0.185.1"
   },
   "devDependencies": {

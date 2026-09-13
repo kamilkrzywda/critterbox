@@ -1,7 +1,9 @@
 /**
- * Critterbox boot (Phase 2): read seed/size → generate world → build terrain → free-flight camera.
- * Seed comes from ?seed= in the URL if present, else a fixed default; size defaults to 300 m.
- * Exposes window.__critterbox — the debug surface e2e and later phases use (Sandfall pattern).
+ * Critterbox boot (Phase 8): async restore-on-load — a saved world (IndexedDB) is restored BEFORE the
+ * first render; only when no save exists does it generate fresh from ?seed= in the URL (else a fixed
+ * default), size defaults to 300 m. The canvas is appended at the END of boot, so #scene being visible
+ * doubles as the "world ready" gate for e2e and no frame ever renders a world that isn't final. Exposes
+ * window.__critterbox — the debug surface e2e uses (Sandfall pattern) — also only once the world is final.
  */
 
 import * as THREE from 'three';
@@ -17,6 +19,8 @@ import { PlantRenderer } from './render/plants';
 import { AnimalRenderer } from './render/animals';
 import { initPopulationPanel, type PopRow } from './ui/population';
 import { initEnvPanel } from './ui/envPanel';
+import { restoreWorld, type RestoreResult } from './save/restore';
+import { loadStateInfo, requestStoragePersistence, saveNow, startAutosave } from './save/save';
 
 const DEFAULT_SEED = 1337;
 const DEFAULT_SIZE = 300;
@@ -51,8 +55,7 @@ const ANIMAL_ROWS: PopRow[] = [
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.domElement.id = 'scene';
-document.body.appendChild(renderer.domElement);
+renderer.domElement.id = 'scene'; // appended at the END of boot — #scene visible ⇒ world ready (e2e gate)
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb); // sky
@@ -114,8 +117,12 @@ let sim: Sim | null = null;
 let plantRenderer: PlantRenderer | null = null;
 let animalRenderer: AnimalRenderer | null = null;
 let refreshPanel: ((seed: number, size: number) => void) | null = null;
+/** True once boot (restore-or-generate + first world build) has finished — gates New World clicks. */
+let booted = false;
 
-function applyWorld(seed: number, size: number): World {
+/** Build terrain + a fresh EMPTY Sim for (seed, size), disposing the previous world's GPU resources.
+ *  Does NOT populate life — the caller seeds fresh (applyWorld) or restores from a save (boot). */
+function buildWorld(seed: number, size: number): World {
   if (terrainGroup) disposeTerrain(terrainGroup); // free the old world's GPU resources
   if (plantRenderer) { plantRenderer.dispose(); scene.remove(plantRenderer.object); }
   if (animalRenderer) { animalRenderer.dispose(); scene.remove(animalRenderer.object); }
@@ -124,17 +131,29 @@ function applyWorld(seed: number, size: number): World {
   scene.add(terrainGroup);
 
   sim = new Sim(world);
-  seedLife(sim); // deterministic plant + mouse population derived from the world (same seed+size → identical)
   plantRenderer = new PlantRenderer();
   scene.add(plantRenderer.object);
-  plantRenderer.sync(sim.agents); // initial full instance upload
   animalRenderer = new AnimalRenderer();
   scene.add(animalRenderer.object);
-  animalRenderer.sync(sim.agents);
 
   frameWorld(world.size);
   refreshPanel?.(world.seed, world.size);
   return world;
+}
+
+/** Upload the current sim's agents to both instanced renderers (initial full upload after a rebuild). */
+function syncRenderers(): void {
+  if (!sim || !plantRenderer || !animalRenderer) return;
+  plantRenderer.sync(sim.agents); // initial full instance upload
+  animalRenderer.sync(sim.agents);
+}
+
+/** Generate a FRESH world: build + deterministic life seeding (same seed+size → identical population). */
+function applyWorld(seed: number, size: number): World {
+  const w = buildWorld(seed, size);
+  seedLife(sim!); // deterministic plant + animal population derived from the world
+  syncRenderers();
+  return w;
 }
 
 function readUrlSeed(): number {
@@ -146,11 +165,10 @@ function readUrlSeed(): number {
   return DEFAULT_SEED;
 }
 
-const initial = applyWorld(readUrlSeed(), DEFAULT_SIZE);
-
-const panel = initWorldgenPanel({ onNewWorld: (seed, size) => { applyWorld(seed, size); } });
+// "New World" regenerates AND overwrites the save: rebuild fresh, then force-store the new state so a
+// reload after an explicit New World resumes THAT world, not whatever was saved before it.
+const panel = initWorldgenPanel({ onNewWorld: (seed, size) => { if (!booted) return; applyWorld(seed, size); void saveNow(sim!); } });
 refreshPanel = panel.setWorld;
-panel.setWorld(initial.seed, initial.size);
 
 // Population panel — plant rows + an animals section, refreshed ~4 Hz from the sim's live stats.
 const popContainer = document.getElementById('population-panel');
@@ -202,7 +220,7 @@ function stepSim(): void {
   animalRenderer.sync(sim.agents); // full matrix rewrite each frame (low counts — fine)
 }
 
-// --- debug surface --------------------------------------------------------------------------
+// --- debug surface (assigned at the END of boot — its presence means "world ready") -----------
 
 declare global {
   interface Window {
@@ -228,37 +246,79 @@ declare global {
       light: number; // [0,1]
       temperature: number; // °C
       weather: 'clear' | 'cloudy' | 'rain';
+      // Phase 8: save/load surface (IndexedDB + gzip worker — see src/save/)
+      /** Force an immediate save regardless of the autosave activity gate. Resolves once stored. */
+      saveNow(): Promise<void>;
+      hasSave(): Promise<boolean>;
+      /** Describe the stored save without restoring it (seed/size/step when a valid save exists). */
+      loadStateInfo(): Promise<{ hasSave: boolean; seed?: number; size?: number; step?: number; agentCount?: number }>;
     };
   }
 }
 
-window.__critterbox = {
-  version: pkg.version,
-  get seed() { return world!.seed; },
-  get worldSize() { return world!.size; },
-  get waterLevel() { return world!.waterLevel; },
-  heightAt(x: number, z: number): number { return world!.heightAt(x, z); },
-  biomeAt(x: number, z: number): number { return world!.biomeAt(x, z); },
-  regenerate(seed?: number, size?: number): void {
-    applyWorld(
-      typeof seed === 'number' ? seed >>> 0 : world!.seed,
-      typeof size === 'number' ? Math.round(size) : world!.size,
-    );
-  },
-  get camera() { return { pos: flight.pos, yaw: flight.yaw, pitch: flight.pitch }; },
-  get paused() { return paused; },
-  setPaused(p: boolean): void { setPaused(!!p); },
-  get agentCount() { return sim ? sim.agents.length : 0; },
-  get populations() { return sim ? sim.populations() : {}; },
-  plantRendererSpecies(): string[] { return plantRenderer ? plantRenderer.speciesIds() : []; },
-  // Phase 7: day/night + weather clock — live sample of the sim's current tick (frozen while paused).
-  get tick() { return tick; },
-  get timeOfDay() { return sim ? sim.environment.timeOfDay : 0; },
-  get dayPhase() { return sim ? sim.environment.phase : 'dawn'; },
-  get light() { return sim ? sim.environment.light : 0; },
-  get temperature() { return sim ? sim.environment.temperature : 15; },
-  get weather() { return sim ? sim.environment.weather : 'clear'; },
-};
+// --- boot (Phase 8): restore-on-load BEFORE the first render ----------------------------------
+// A saved world replaces the fresh default one before any frame renders. Any failure — no save, corrupt
+// blob, version mismatch — simply generates a fresh deterministic world from the URL seed (never crashes).
+
+async function boot(): Promise<void> {
+  requestStoragePersistence(); // once at startup — reduces IndexedDB eviction risk
+  let restored: RestoreResult | null = null;
+  try {
+    restored = await restoreWorld();
+  } catch (err) {
+    console.warn('[critterbox] restore failed — starting fresh:', err instanceof Error ? err.message : String(err));
+  }
+  if (restored) {
+    buildWorld(restored.seed, restored.size); // terrain re-derived from seed+size (not stored)
+    sim!.loadState(restored.agents, restored.corpses, restored.step); // agents/corpses/step verbatim
+    syncRenderers();
+    console.log(`[critterbox] restored world seed ${restored.seed} @ step ${restored.step}, ${restored.agents.length} agents`);
+  } else {
+    applyWorld(readUrlSeed(), DEFAULT_SIZE); // no save — first visit (or a cleared one)
+  }
+
+  window.__critterbox = {
+    version: pkg.version,
+    get seed() { return world!.seed; },
+    get worldSize() { return world!.size; },
+    get waterLevel() { return world!.waterLevel; },
+    heightAt(x: number, z: number): number { return world!.heightAt(x, z); },
+    biomeAt(x: number, z: number): number { return world!.biomeAt(x, z); },
+    regenerate(seed?: number, size?: number): void {
+      // Programmatic "New World" — same semantics as the dialog button (rebuild + overwrite the save).
+      applyWorld(
+        typeof seed === 'number' ? seed >>> 0 : world!.seed,
+        typeof size === 'number' ? Math.round(size) : world!.size,
+      );
+      void saveNow(sim!);
+    },
+    get camera() { return { pos: flight.pos, yaw: flight.yaw, pitch: flight.pitch }; },
+    get paused() { return paused; },
+    setPaused(p: boolean): void { setPaused(!!p); },
+    get agentCount() { return sim ? sim.agents.length : 0; },
+    get populations() { return sim ? sim.populations() : {}; },
+    plantRendererSpecies(): string[] { return plantRenderer ? plantRenderer.speciesIds() : []; },
+    // Phase 7: day/night + weather clock — live sample of the sim's current tick (frozen while paused).
+    get tick() { return tick; },
+    get timeOfDay() { return sim ? sim.environment.timeOfDay : 0; },
+    get dayPhase() { return sim ? sim.environment.phase : 'dawn'; },
+    get light() { return sim ? sim.environment.light : 0; },
+    get temperature() { return sim ? sim.environment.temperature : 15; },
+    get weather() { return sim ? sim.environment.weather : 'clear'; },
+    // Phase 8: save/load surface.
+    saveNow: () => (sim ? saveNow(sim) : Promise.resolve()),
+    hasSave: async (): Promise<boolean> => (await loadStateInfo()).hasSave,
+    loadStateInfo: () => loadStateInfo(),
+  };
+
+  document.body.appendChild(renderer.domElement); // #scene visible ⇒ ready (e2e gate) — after the surface exists
+  startAutosave(() => sim); // ~30 s timer (activity-gated) + forced flush on hidden/pagehide(capture)
+  booted = true;
+  lastTime = performance.now(); // boot took a moment — don't bank that wall time into the first frame
+  requestAnimationFrame(frame);
+}
+
+void boot();
 
 // --- render loop -----------------------------------------------------------------------------
 
@@ -285,5 +345,4 @@ function frame(now: number): void {
   updateSkyAndLights(); // Phase 7: sky + sun follow the day/night light curve (cheap per-frame lerps)
   renderer.render(scene, camera);
 }
-
-requestAnimationFrame(frame);
+// (the loop starts at the end of boot() — no frame renders before restore-on-load has settled)

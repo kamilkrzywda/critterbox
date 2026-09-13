@@ -31,6 +31,7 @@ test('world loads with default size and debug surface', async ({ page }) => {
 
 test('New World with a changed seed rebuilds the terrain', async ({ page }) => {
   await page.goto('/');
+  await expect(page.locator('#scene')).toBeVisible(); // boot done (restore-on-load) — debug surface exists
   const before = await critterbox(page);
   const hBefore = await heightAt(page, 12.5, -34.5);
 

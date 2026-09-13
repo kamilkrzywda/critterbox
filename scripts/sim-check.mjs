@@ -57,6 +57,8 @@ const SOURCES = [
   'src/sim/agents/index.ts',
   'src/sim/sim.ts',
   'src/sim/seedLife.ts',
+  // Phase 8: save payload serialization (pure binary layout + JSON tail — no DOM, runs headlessly)
+  'src/save/serialize.ts',
 ];
 
 let sections = 0;
@@ -136,6 +138,8 @@ try {
     const carpMod = tmpRequire('./sim/agents/animals/carp.js');
     const pikeMod = tmpRequire('./sim/agents/animals/pike.js');
     const corpsesMod = tmpRequire('./sim/corpses.js');
+    // Phase 8: save payload serialization (pure — runs headlessly; the worker/IDB layers are browser-only)
+    const saveSerializeMod = tmpRequire('./save/serialize.js');
 
     const ctxExtra = {
       worldgen: worldgenMod,
@@ -169,6 +173,7 @@ try {
         pike: pikeMod.PIKE,
         corpses: corpsesMod, // corpse layer: spawnCorpse/findNearestCorpse/scavengeCorpse + decay constant
       },
+      save: saveSerializeMod, // Phase 8: serializeWorld/deserializeWorld round-trip (pure binary layout)
     };
 
     let files = [];
