@@ -30,6 +30,9 @@ import { FOX } from './agents/animals/fox';
 import { STORK } from './agents/animals/stork';
 import { OWL } from './agents/animals/owl';
 import { CROW } from './agents/animals/crow';
+import { CARP } from './agents/animals/carp';
+import { PIKE } from './agents/animals/pike';
+import { AQUATIC_SEED_DEPTH, initAquaticAgent } from './agents/animals/aquatic';
 
 /** Salt mixed into the world seed for the life-seeding PRNG (keeps it distinct from noise offsets). */
 const LIFE_SALT = 0x5eed;
@@ -63,6 +66,27 @@ const STORK_TARGET = 4; // storks placed next to frogs in the marsh
 const OWL_TARGET = 6; // owls placed near mouse/hare clusters (lifespan min 14400 < the 20k gate, so the cohort needs headroom)
 const CROW_FAMILIES = 4; // crow family clusters anywhere on dry land (~12 total — lifespan min 9000 needs breeding headroom)
 const CROW_FAMILY_SIZE = 3;
+// Phase 6 densities (deep river cells: height < waterLevel − AQUATIC_SEED_DEPTH).
+const CARP_FAMILIES = 14; // carp family clusters in deep river cells (~35 total — see placeAquaticFamily). Dense enough
+// that pike encounter prey on every patrol (Phase 6 stability tuning: at ~24 seeded, pike starved between meals)
+const CARP_FAMILY_SIZE = 3;
+const PIKE_FAMILIES = 3; // pike family clusters placed near carp in the water (~6 total, guaranteed mixed sexes —
+// individually scattered pike drifted apart before breeding and went extinct on old age (Phase 6 stability tuning)
+const PIKE_FAMILY_SIZE = 2;
+/** Meters above the water line a plant may sit and still be reachable from the swim line (mirrors CARP_SHORE_REACH). */
+const AQUATIC_SEED_SHORE_REACH = 3;
+/** A carp family must anchor within this of an edible shore plant: a carp seeded in open water far from any
+ *  bank starves (its diet is shore plants + waterline insects), and the early strandings thinned the prey
+ *  patches until pike stranded too (Phase 6 stability forensics). Directional foraging covers the last stretch. */
+const AQUATIC_SEED_FOOD_REACH = 40;
+/** Prey clusters seeded in the PIKE'S water body (the largest basin, see pass M2/N): pike relocate their
+ *  roost whenever they end up >2×wanderRadius from it, so a scattered prey field gets hunted down patch by
+ *  patch — every cluster converges on and strips the last surviving one before it can breed back (Phase 6
+ *  stability forensics). The fix is structural: PIKE_PREY_CLUSTERS dense clusters ≥30 m apart, each big
+ *  enough that local births outpace even a FULL pike population converging on it (~15 carp ≈ 7 pairs → ~14
+ *  births/4k ticks vs ≤8 pikes' ~8 kills/4k ticks), with one pike pair anchored per cluster. */
+const PIKE_PREY_CLUSTERS = 4; // the fourth is a reserve (no pike pair) — buffer prey for stragglers
+const PIKE_PREY_TARGET = 60; // total carp across the clusters (~15 each)
 /** Jitter range (m) for insects inside a cluster. */
 const INSECT_CLUSTER_SPREAD = 5;
 /** Age (ticks) of seeded insects — young adults (> maturityAge 120, < lifespan min 900). */
@@ -138,6 +162,62 @@ export function seedLife(sim: Sim): SeedStats {
       if (world.heights[z * w + x] < world.waterLevel) continue; // dry land only
       if (!ok(world.biomes[z * w + x], x, z)) continue;
       placeFamily(sp, x - halfW + 0.5, z - halfD + 0.5, n);
+      return;
+    }
+  };
+
+  /** True when a cell is deep enough to SEED an aquatic agent (height < waterLevel − AQUATIC_SEED_DEPTH). */
+  const isDeepCell = (x: number, z: number): boolean => world.heightAt(x, z) < world.waterLevel - AQUATIC_SEED_DEPTH;
+
+  /** Shore plants a carp can eat from the swim line (pass A has run — the list is complete by pass M). */
+  let shorePlants: { x: number; z: number }[] = [];
+  const CARP_SHORE_FOOD = ['reed', 'grass', 'clover', 'cranberry']; // mirrors CARP.foodSpecies
+  /** True when (x,z) sits within AQUATIC_SEED_FOOD_REACH of an edible shore plant (see the constant). */
+  const nearShoreFood = (x: number, z: number): boolean => {
+    const r2 = AQUATIC_SEED_FOOD_REACH * AQUATIC_SEED_FOOD_REACH;
+    for (const p of shorePlants) {
+      const dx = p.x - x;
+      const dz = p.z - z;
+      if (dx * dx + dz * dz <= r2) return true;
+    }
+    return false;
+  };
+
+  /** Place a small family cluster of an aquatic species around a deep river cell: n members within ~8 m,
+   *  each over a deep-enough cell (the inverse of placeFamily's dry-land skip), guaranteed to include at
+   *  least one male AND one female so breeding starts immediately. Members get their aquatic init
+   *  (depth fraction + last-valid position) right away. Returns how many members actually landed. */
+  const placeAquaticFamily = (sp: AnimalSpecies, cx: number, cz: number, n: number): number => {
+    const members: Agent[] = [];
+    for (let i = 0; i < n; i++) {
+      const ang = rng() * Math.PI * 2;
+      const dist = rng() * 8;
+      const x = cx + Math.cos(ang) * dist;
+      const z = cz + Math.sin(ang) * dist;
+      if (!isDeepCell(x, z)) continue; // skip a member that would dry out
+      members.push(placeAnimal(sp, x, z));
+    }
+    let hasM = false, hasF = false;
+    for (const m of members) {
+      if (m.sex === 'm') hasM = true;
+      else hasF = true;
+    }
+    if (!hasM && members.length > 0) members[0].sex = 'm';
+    if (!hasF && members.length > 1) members[members.length - 1].sex = 'f';
+    for (const m of members) initAquaticAgent(sim, m); // depth fraction + last-valid position + seat at depth
+    return members.length;
+  };
+
+  /** Rejection-sample a DEEP river cell NEAR an edible shore plant and place one aquatic family there. */
+  const placeAquaticFamilyInRiver = (sp: AnimalSpecies, n: number): void => {
+    for (let guard = 0; guard < 200; guard++) {
+      const x = Math.floor(rng() * w);
+      const z = Math.floor(rng() * d);
+      const cx = x - halfW + 0.5;
+      const cz = z - halfD + 0.5;
+      if (!isDeepCell(cx, cz)) continue; // deep river cells only
+      if (!nearShoreFood(cx, cz)) continue; // a family anchored in open water starves — see AQUATIC_SEED_FOOD_REACH
+      placeAquaticFamily(sp, cx, cz, n);
       return;
     }
   };
@@ -277,6 +357,123 @@ export function seedLife(sim: Sim): SeedStats {
   // --- Pass L: crow FAMILIES anywhere on dry land (~12 in 4 family clusters) ----------------------------
   for (let f = 0; f < CROW_FAMILIES; f++) {
     placeFamilyOnBiome(CROW, CROW_FAMILY_SIZE, () => true);
+  }
+
+  // --- Connected deep-water components (terrain only — before pass M) ----------------------------------
+  // The river can split into DISCONNECTED basins (a land barrier between two channels). A pike seeded in a
+  // small closed basin strips its prey patch and then starves — it can never swim to the carp boom on the
+  // other side of the barrier (Phase 6 stability forensics, seed 1337: all six pikes landed west, the western
+  // channel's ~24 carp were over-predated in ~2k ticks, pike extinct by t≈9k while the eastern carp boomed).
+  // So pike families only anchor to carp inside the LARGEST connected deep-water component that holds at
+  // least one seeded carp (tie → most carp): basin area is the proxy for prey carrying capacity — a big water
+  // body with reed-lined banks sustains a carp population through predation, a narrow closed channel doesn't.
+  // Deterministic flood fill over the heightmap grid — one-shot seeding cost, no rng involved.
+  const compOf = new Int32Array(w * d).fill(-1);
+  const compSizes: number[] = [];
+  let nComps = 0;
+  for (let z = 0; z < d; z++) {
+    for (let x = 0; x < w; x++) {
+      const i = z * w + x;
+      if (compOf[i] !== -1 || world.heights[i] >= world.waterLevel - AQUATIC_SEED_DEPTH) continue;
+      compOf[i] = nComps;
+      let size = 0;
+      const stack: number[] = [i];
+      while (stack.length > 0) {
+        const c = stack.pop() as number;
+        size++;
+        const cx = c % w;
+        if (cx > 0 && compOf[c - 1] === -1 && world.heights[c - 1] < world.waterLevel - AQUATIC_SEED_DEPTH) { compOf[c - 1] = nComps; stack.push(c - 1); }
+        if (cx < w - 1 && compOf[c + 1] === -1 && world.heights[c + 1] < world.waterLevel - AQUATIC_SEED_DEPTH) { compOf[c + 1] = nComps; stack.push(c + 1); }
+        if (c >= w && compOf[c - w] === -1 && world.heights[c - w] < world.waterLevel - AQUATIC_SEED_DEPTH) { compOf[c - w] = nComps; stack.push(c - w); }
+        if (c < (d - 1) * w && compOf[c + w] === -1 && world.heights[c + w] < world.waterLevel - AQUATIC_SEED_DEPTH) { compOf[c + w] = nComps; stack.push(c + w); }
+      }
+      compSizes[nComps] = size;
+      nComps++;
+    }
+  }
+
+  // --- Pass M: carp FAMILIES in deep river cells near shore plants (~35 in 14 family clusters) ----------
+  // The anchor cell must be deep AND within AQUATIC_SEED_FOOD_REACH of an edible shore plant (reed/grass/
+  // clover/cranberry at the waterline): a carp seeded in open water far from any bank has nothing to eat and
+  // starves, thinning the prey base until pike strand too (Phase 6 stability forensics).
+  shorePlants = [];
+  for (const a of sim.agents) {
+    if (!CARP_SHORE_FOOD.includes(a.species)) continue;
+    if (world.heightAt(a.pos.x, a.pos.z) < world.waterLevel + AQUATIC_SEED_SHORE_REACH) {
+      shorePlants.push({ x: a.pos.x, z: a.pos.z });
+    }
+  }
+  for (let f = 0; f < CARP_FAMILIES; f++) {
+    placeAquaticFamilyInRiver(CARP, CARP_FAMILY_SIZE);
+  }
+
+  // --- Pass M2: top up the pike's basin to PIKE_PREY_TARGET carp -----------------------------------------
+  // The global draw above scatters families across every water body — a random ~10 carp in the pike's basin
+  // get stripped by six pikes before the first breeding wave (Phase 6 stability forensics). Guarantee the
+  // prey base: extra carp families land ONLY inside the chosen component.
+  const carpPerComp: number[] = new Array(nComps).fill(0);
+  for (const a of sim.agents) {
+    if (a.species !== 'carp') continue;
+    const ci = compOf[Math.floor(a.pos.z + halfD) * w + Math.floor(a.pos.x + halfW)];
+    if (ci >= 0) carpPerComp[ci]++;
+  }
+  let pikeComponent = -1;
+  for (let c = 0; c < nComps; c++) {
+    if (carpPerComp[c] === 0) continue; // no prey in this basin — never seed a predator there
+    if (pikeComponent === -1 || compSizes[c] > compSizes[pikeComponent] ||
+        (compSizes[c] === compSizes[pikeComponent] && carpPerComp[c] > carpPerComp[pikeComponent])) {
+      pikeComponent = c;
+    }
+  }
+  const carpClusters: { x: number; z: number }[] = []; // dense prey clusters in the pike's basin — pass N anchors one pike pair per cluster
+  if (pikeComponent >= 0) {
+    // Pick PIKE_PREY_CLUSTERS anchor points ≥30 m apart, deep + near shore food inside the chosen component.
+    for (let guard = 0; carpClusters.length < PIKE_PREY_CLUSTERS && guard < 400; guard++) {
+      const x = Math.floor(rng() * w);
+      const z = Math.floor(rng() * d);
+      const cx = x - halfW + 0.5;
+      const cz = z - halfD + 0.5;
+      if (!isDeepCell(cx, cz)) continue; // deep river cells only
+      if (compOf[Math.floor(cz + halfD) * w + Math.floor(cx + halfW)] !== pikeComponent) continue;
+      if (!nearShoreFood(cx, cz)) continue; // a cluster far from any bank starves — see AQUATIC_SEED_FOOD_REACH
+      let tooClose = false;
+      for (const c of carpClusters) {
+        const dx = c.x - cx;
+        const dz = c.z - cz;
+        if (dx * dx + dz * dz < 30 * 30) { tooClose = true; break; } // ≥30 m apart — one pike pair per cluster, no convergence
+      }
+      if (tooClose) continue;
+      carpClusters.push({ x: cx, z: cz });
+    }
+    // Fill each cluster to its quota (~PIKE_PREY_TARGET / cluster count ≈ 15). Members land within ~12 m of
+    // the anchor — dense enough that opposite-sex pairs fall inside CARP.matingRange (8 m) and the cluster
+    // breeds back after predation (scattered singletons never do: Phase 6 stability forensics).
+    const perCluster = Math.ceil(PIKE_PREY_TARGET / carpClusters.length);
+    for (const c of carpClusters) {
+      let placedHere = 0;
+      let guard = 0;
+      while (placedHere < perCluster && guard++ < 20) {
+        const ang = rng() * Math.PI * 2;
+        const dist = rng() * 4; // tight around the anchor — keep the cluster dense
+        placedHere += placeAquaticFamily(CARP, c.x + Math.cos(ang) * dist, c.z + Math.sin(ang) * dist, CARP_FAMILY_SIZE);
+      }
+    }
+  }
+
+  // --- Pass N: pike FAMILIES — one pair per prey cluster (~6 in 3 pairs) ---------------------------------
+  // Like the fox/owl passes but underwater: a pike seeded far from any carp would starve (the river is its
+  // whole world). Each pair lands INSIDE a different pass-M2 cluster (≥30 m apart): initial food access at
+  // t=0, guaranteed mixed sexes so breeding starts as soon as both mature — and territorial separation,
+  // because pike relocate their roost whenever they end up >2×wanderRadius from it, so pairs seeded on the
+  // same patch converge there and strip it (Phase 6 stability forensics). Count EVERY placed member toward
+  // the cap — a partial family still leaves a hunting pike behind.
+  let pikePlaced = 0;
+  for (let f = 0; f < PIKE_FAMILIES && f < carpClusters.length && pikePlaced < PIKE_FAMILIES * PIKE_FAMILY_SIZE; f++) {
+    const c = carpClusters[f]; // one pair per cluster — the last cluster stays a reserve
+    const ang = rng() * Math.PI * 2;
+    const dist = rng() * 6; // inside the cluster — first meal within sense radius at t=0
+    const toPlace = Math.min(PIKE_FAMILY_SIZE, PIKE_FAMILIES * PIKE_FAMILY_SIZE - pikePlaced); // never overshoot the cap
+    pikePlaced += placeAquaticFamily(PIKE, c.x + Math.cos(ang) * dist, c.z + Math.sin(ang) * dist, toPlace);
   }
 
   return { total, perSpecies };

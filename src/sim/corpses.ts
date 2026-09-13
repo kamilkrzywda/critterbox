@@ -18,8 +18,8 @@
 
 import type { Sim } from './sim';
 import type { Agent, Vec3 } from './types';
-import { ANIMAL_STATE_MATE, ANIMAL_STATE_SEEK_FOOD } from './types';
-import { animalEnergyMax, attemptMate, canAttemptBreed, pickWanderTarget, registerAnimalDeathHook, seekNearestFood } from './agents/animals/base';
+import { ANIMAL_STATE_MATE, ANIMAL_STATE_SEEK_FOOD, ANIMAL_STATE_WANDER } from './types';
+import { FORAGE_SEARCH_MULT, animalEnergyMax, attemptMate, canAttemptBreed, pickWanderTarget, registerAnimalDeathHook, seekNearestFood } from './agents/animals/base';
 import type { AnimalSpecies } from './agents/animals/base';
 
 /** A decaying carcass left by a dead animal. `pos` is a COPY of the victim's position at death. */
@@ -120,6 +120,24 @@ export function scavengerDecide(sim: Sim, a: Agent, sp: AnimalSpecies): void {
       d.targetId = best.id;
       delete d.corpseTarget;
       a.state = ANIMAL_STATE_SEEK_FOOD;
+      return;
+    }
+    // Nothing in kill range — steer toward the nearest food BEYOND sense radius instead of wandering
+    // blindly (the generic decide's directional-foraging pattern, Phase 5). Without it a scavenger whose
+    // home range sits in a prey desert patrols an empty patch and starves: v0.6.0 survived on slow attrition
+    // + breeding, but the Phase 6 aquatic layer (carp thinning waterline insects → early mouse dip) tipped
+    // that balance into fox extinction — the fallback makes desert-patch starvation a transient, not a death spiral.
+    const far = seekNearestFood(sim, a, sp, sp.senseRadius * FORAGE_SEARCH_MULT);
+    if (far) {
+      const dx = far.pos.x - a.pos.x;
+      const dz = far.pos.z - a.pos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz) || 1;
+      const step = Math.min(dist * 0.5, sp.wanderRadius); // one wander-step's worth toward the food
+      d.tx = a.pos.x + (dx / dist) * step;
+      d.tz = a.pos.z + (dz / dist) * step;
+      delete d.targetId;
+      delete d.corpseTarget;
+      a.state = ANIMAL_STATE_WANDER;
       return;
     }
   }

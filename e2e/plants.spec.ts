@@ -15,7 +15,7 @@ interface CritterboxSim {
 
 /** Species ids that must NEVER appear in the plant renderer (animals have their own renderer — leaking
  *  them in renders every animal as a moving generic cone, which reads as "plants moving"). */
-const ANIMAL_IDS = ['mouse', 'hare', 'hamster', 'deer', 'insect', 'frog', 'fox', 'stork', 'owl', 'crow'];
+const ANIMAL_IDS = ['mouse', 'hare', 'hamster', 'deer', 'insect', 'frog', 'fox', 'stork', 'owl', 'crow', 'carp', 'pike'];
 
 test('plant ecosystem loads with a populated sim and population panel', async ({ page }) => {
   await page.goto('/');

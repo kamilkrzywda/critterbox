@@ -48,6 +48,10 @@ const SOURCES = [
   'src/sim/agents/animals/stork.ts',
   'src/sim/agents/animals/owl.ts',
   'src/sim/agents/animals/crow.ts',
+  // Phase 6: the aquatic layer — carp + pike in the river volume (shared helpers in aquatic.ts)
+  'src/sim/agents/animals/aquatic.ts',
+  'src/sim/agents/animals/carp.ts',
+  'src/sim/agents/animals/pike.ts',
   'src/sim/agents/index.ts',
   'src/sim/sim.ts',
   'src/sim/seedLife.ts',
@@ -123,6 +127,10 @@ try {
     const storkMod = tmpRequire('./sim/agents/animals/stork.js');
     const owlMod = tmpRequire('./sim/agents/animals/owl.js');
     const crowMod = tmpRequire('./sim/agents/animals/crow.js');
+    // Phase 6: the aquatic layer (shared helpers + carp/pike species tables)
+    const aquaticMod = tmpRequire('./sim/agents/animals/aquatic.js');
+    const carpMod = tmpRequire('./sim/agents/animals/carp.js');
+    const pikeMod = tmpRequire('./sim/agents/animals/pike.js');
     const corpsesMod = tmpRequire('./sim/corpses.js');
 
     const ctxExtra = {
@@ -151,6 +159,9 @@ try {
         stork: storkMod.STORK,
         owl: owlMod.OWL,
         crow: crowMod.CROW,
+        aquatic: aquaticMod, // Phase 6 shared helpers: inRiverVolume/initAquaticAgent/aquaticSettle + depth constants
+        carp: carpMod.CARP, // Phase 6 species tables (trait bounds for assertions)
+        pike: pikeMod.PIKE,
         corpses: corpsesMod, // corpse layer: spawnCorpse/findNearestCorpse/scavengeCorpse + decay constant
       },
     };

@@ -122,6 +122,13 @@ export interface AnimalSpecies extends Species {
    *  runs showed foxes/owls starving in "prey deserts" between clusters. Roost-anchored predators patrol a
    *  fixed home range and only travel when hungry (directional foraging). */
   roostAnchored?: boolean;
+  /** With roostAnchored, normally an animal that ends up >2×wanderRadius from its roost (e.g. chased prey to
+   *  another patch) adopts the new position as home. Set this to keep the ORIGINAL roost forever: the animal
+   *  may travel while hungry but always wanders back home when full. For pike in a finite set of discrete
+   *  prey clusters, relocation lets the whole population converge on and strip the last surviving cluster —
+   *  sequential depletion → extinction (Phase 6 stability forensics). Territorial locking keeps predation
+   *  distributed across all clusters instead. */
+  noRelocate?: boolean;
   /** Hard population cap per species — breeding blocked at/above it. */
   popCap: number;
   /** Plant species ids this animal eats. */
@@ -134,6 +141,11 @@ export interface AnimalSpecies extends Species {
   /** Activity hook (Phase 5/7): current activity multiplier in [0,1]; hunting requires > 0. Returns 1.0 for
    *  diurnal species by default (unset); Phase 7 wires light → activity so owls hunt at night only. */
   activityLevel?: () => number;
+  /** Optional post-act position fixup (Phase 6 aquatic): called once per tick after the act phase, before
+   *  the survival return. Fish use it to clamp back into the river volume when a move dried out and to sit
+   *  at their depth fraction of the water column. Returns true when the agent's position was clamped — the
+   *  pending target is then dropped so the animal re-decides instead of grinding against the shore. */
+  settlePosition?: (sim: Sim, a: Agent) => boolean;
   /** World-space body box dimensions in METERS at the MIDPOINT of the size trait (width, height, depth) —
    *  the explicit per-species size mapping for rendering. The renderer maps the full size-trait range onto
    *  a ±25% band around these values via visualScale() (see below), so an individual's rendered body stays
@@ -386,6 +398,20 @@ export function updateAnimal(sim: Sim, a: Agent): boolean {
     }
   }
 
+  // --- aquatic fixup (Phase 6): species with a settlePosition hook re-seat themselves after acting — fish
+  // clamp back into the river volume when a move dried out and sit at their depth fraction of the column.
+  // A clamped move drops the pending target so the animal re-decides instead of grinding against the shore.
+  if (as_.settlePosition) {
+    const clamped = as_.settlePosition(sim, a);
+    if (clamped && mem && mem.tx !== undefined) {
+      delete mem.tx;
+      delete mem.tz;
+      delete mem.targetId;
+      delete mem.corpseTarget;
+      a.state = ANIMAL_STATE_IDLE;
+    }
+  }
+
   return true;
 }
 
@@ -450,10 +476,11 @@ function decide(sim: Sim, a: Agent, sp: AnimalSpecies): void {
 export const PLANT_MIN_EDIBLE_FRACTION = 0.6;
 
 /** How far beyond senseRadius a hungry animal scans when nothing is in kill range (directional foraging,
- *  see decide). Only used as a fallback — the common case stays a cheap local query. ×6 covers the gaps
- *  between prey clusters on the default world (fox: ~108 m, owl: ~180 m) so a stranded predator can always
- *  find its way back to food (Phase 5 stability tuning). */
-const FORAGE_SEARCH_MULT = 6;
+ *  see decide / scavengerDecide). Only used as a fallback — the common case stays a cheap local query. ×6
+ *  covers the gaps between prey clusters on the default world (fox: ~108 m, owl: ~180 m) so a stranded
+ *  predator can always find its way back to food (Phase 5 stability tuning). Exported because the
+ *  scavenger decide (corpses.ts) reuses the exact same fallback. */
+export const FORAGE_SEARCH_MULT = 6;
 
 /**
  * Nearest edible agent (plant in foodSpecies or animal in preySpecies) within `radius` (default: the
@@ -579,12 +606,15 @@ export function pickWanderTarget(sim: Sim, a: Agent, sp: AnimalSpecies): void {
     if (d.roostZ === undefined) d.roostZ = a.pos.z;
     // Relocation: an animal that has moved far from its roost (e.g. chased prey to another patch and fed
     // there) adopts its current position as the new home — otherwise it would waste energy walking back to
-    // an empty patch on every full-belly wander.
-    const dxr = a.pos.x - d.roostX;
-    const dzr = a.pos.z - d.roostZ;
-    if (dxr * dxr + dzr * dzr > 4 * sp.wanderRadius * sp.wanderRadius) {
-      d.roostX = a.pos.x;
-      d.roostZ = a.pos.z;
+    // an empty patch on every full-belly wander. noRelocate species keep their original roost forever
+    // (territorial lock — see the flag's doc).
+    if (!sp.noRelocate) {
+      const dxr = a.pos.x - d.roostX;
+      const dzr = a.pos.z - d.roostZ;
+      if (dxr * dxr + dzr * dzr > 4 * sp.wanderRadius * sp.wanderRadius) {
+        d.roostX = a.pos.x;
+        d.roostZ = a.pos.z;
+      }
     }
     ax = d.roostX;
     az = d.roostZ;

@@ -1,10 +1,11 @@
 /**
- * Long-run population-stability harness (Phase 5 ACCEPTANCE GATE, PLAN "Testing & verification"): a
- * headless run of the FULL sim on the default world (seed 1337, 300×300) for ≥20,000 unpaused real
- * step() calls. Asserts that every core species — all plants AND all animals incl. the Phase 5 frogs and
- * predators — has population > 0 at the end and never hits 0 after a warm-up window (first 500 steps),
- * with per-species min ≥ 1, animal max ≤ popCap, and plant growth bounded (seed dispersal is capped by
- * the herbivore base). Prints a per-species min/max/avg + final-count stability report.
+ * Long-run population-stability harness (Phase 5 ACCEPTANCE GATE, extended in Phase 6, PLAN "Testing &
+ * verification"): a headless run of the FULL sim on the default world (seed 1337, 300×300) for ≥20,000
+ * unpaused real step() calls. Asserts that every core species — all plants AND all animals incl. the Phase 5
+ * frogs/predators and the Phase 6 aquatic layer (carp/pike, picked up automatically from the registry) — has
+ * population > 0 at the end and never hits 0 after a warm-up window (first 500 steps), with per-species min ≥
+ * 1, animal max ≤ popCap, and plant growth bounded (seed dispersal is capped by the herbivore base). Prints a
+ * per-species min/max/avg + final-count stability report.
  */
 
 export default {

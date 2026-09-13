@@ -40,6 +40,9 @@ const ANIMAL_ROWS: PopRow[] = [
   { id: 'stork', name: 'Stork' },
   { id: 'owl', name: 'Owl' },
   { id: 'crow', name: 'Crow' },
+  // Phase 6: the aquatic layer — carp + pike in the river volume
+  { id: 'carp', name: 'Carp' },
+  { id: 'pike', name: 'Pike' },
 ];
 
 // --- renderer / scene -------------------------------------------------------------------

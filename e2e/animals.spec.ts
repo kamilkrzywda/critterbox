@@ -16,6 +16,8 @@ interface CritterboxSim {
 const ANIMALS = ['mouse', 'hare', 'hamster', 'deer', 'insect'];
 /** Phase 5: frogs + the predator/scavenger layer. */
 const PHASE5_ANIMALS = ['frog', 'fox', 'stork', 'owl', 'crow'];
+/** Phase 6: the aquatic layer — carp + pike in the river volume. */
+const PHASE6_ANIMALS = ['carp', 'pike'];
 
 test('all five herbivore species present on load', async ({ page }) => {
   await page.goto('/');
@@ -76,6 +78,24 @@ test('Phase 5 species present on load: frog, fox, stork, owl, crow', async ({ pa
   // The population panel shows a live row per Phase 5 species.
   const panel = page.locator('#population-panel');
   for (const sp of PHASE5_ANIMALS) {
+    await expect(panel.locator(`.pop-row[data-species="${sp}"]`)).toBeVisible();
+  }
+});
+
+test('Phase 6 species present on load: carp, pike', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#scene')).toBeVisible();
+
+  const pops = await page.evaluate(() => {
+    return (window as unknown as { __critterbox: CritterboxSim }).__critterbox.populations;
+  });
+  for (const sp of PHASE6_ANIMALS) {
+    expect(pops[sp]?.count ?? 0, `${sp} count`).toBeGreaterThan(0);
+  }
+
+  // The population panel shows a live row per Phase 6 species.
+  const panel = page.locator('#population-panel');
+  for (const sp of PHASE6_ANIMALS) {
     await expect(panel.locator(`.pop-row[data-species="${sp}"]`)).toBeVisible();
   }
 });

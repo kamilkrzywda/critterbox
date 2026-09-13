@@ -30,6 +30,8 @@ const PALETTES: Record<string, RGB> = {
   stork: [0.9, 0.87, 0.82], // white stork (the red bill/legs hint is left to the jitter)
   owl: [0.45, 0.32, 0.2], // brown round owl
   crow: [0.1, 0.1, 0.12], // small black crow
+  carp: [0.72, 0.58, 0.3], // golden-brown river carp (visible through the translucent water plane)
+  pike: [0.42, 0.5, 0.28], // olive-green elongated pike
 };
 const FALLBACK: RGB = [0.5, 0.42, 0.3];
 /** Per-instance colour jitter amount (fraction of the base channel). */

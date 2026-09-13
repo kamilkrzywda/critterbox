@@ -20,3 +20,6 @@ import './animals/fox';
 import './animals/stork';
 import './animals/owl';
 import './animals/crow';
+// Phase 6: the aquatic layer — carp + pike in the river volume
+import './animals/carp';
+import './animals/pike';

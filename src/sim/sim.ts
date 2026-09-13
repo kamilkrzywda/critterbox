@@ -25,6 +25,7 @@ import { SpatialGrid } from './spatial';
 import { getSpecies } from './registry';
 import { agentRand } from './rng';
 import './agents'; // side effect: register every species before any agent is created or stepped
+import type { AnimalSpecies } from './agents/animals/base';
 import { INITIAL_ANIMAL_ENERGY_FRACTION, animalEnergyMax, dropSeedlingNearby, notifyAnimalDeath, updateAnimal } from './agents/animals/base';
 import { CORPSE_DECAY_PER_TICK, initCorpseSystem, scavengeCorpse, type Corpse } from './corpses';
 
@@ -149,6 +150,11 @@ export class Sim {
     this.byIdArr[a.id] = a; // ids are sequential from 1 → the array grows in lockstep
     this.spByIdArr[a.id] = sp;
     this.popCounts.set(sp.id, (this.popCounts.get(sp.id) ?? 0) + 1);
+    // Aquatic fixup at birth (Phase 6): species with a settlePosition hook seat themselves immediately — fish
+    // get their water-column depth right away and are rescued to nearby deep water if born across a bend.
+    if (sp.kind === 'animal') {
+      (sp as AnimalSpecies).settlePosition?.(this, a);
+    }
     return a;
   }
 
