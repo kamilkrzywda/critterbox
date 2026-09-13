@@ -43,7 +43,6 @@ scripts/sim-check.mjs   — headless deterministic suite runner (tsc-CJS compile
 scripts/checks/*.mjs    — check sections: worldgen, terrain, spatial, plants, animals, predators, sizes, stability (20k-step run)
 e2e/                 — Playwright specs: smoke, worldgen, camera, plants, animals
 playwright.config.ts     — webServer auto-runs build + preview on :4173
-docker-compose.yml       — local deployment (see below)
 ```
 
 ## Commands
@@ -62,8 +61,4 @@ Per-feature gate (run locally before push): sim-check → tsc/build → playwrig
 
 ## Deploy
 
-Two targets; the same `dist/` works for both because `vite.config.ts` uses `base: './'` (relative asset paths — root on nginx, `/critterbox/` subpath on Pages).
-
-**Local deployment** — `docker-compose.yml`: nginx:alpine bind-mounting `./dist` read-only behind the shared Traefik proxy, Host `critters.dev.kkhost.pl`. Build locally (`npm run build`) then `docker compose up -d`.
-
-**GitHub Pages mirror (test)** — automatic on push to master via `.github/workflows/deploy.yml`: checkout → setup-node 22 → `npm ci` → `npm run build` → publish `dist/` with peaceiris/actions-gh-pages. Served at https://kamilkrzywda.github.io/critterbox/. One-time manual step: enable Pages in repo Settings → Pages → Source "GitHub Actions".
+GitHub Pages at https://kamilkrzywda.github.io/critterbox/ — automatic on push to master via `.github/workflows/deploy.yml`: checkout → setup-node 24 → `npm ci` → `npm run build` → publish `dist/` with actions/deploy-pages. The same `dist/` works because `vite.config.ts` uses `base: './'` (relative asset paths).

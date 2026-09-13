@@ -83,4 +83,4 @@ All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 - Minimal placeholder scene (ground plane + title overlay); real worldgen lands in v0.2.0
 - Headless sim-check runner stub (`scripts/sim-check.mjs`)
 - Playwright e2e smoke test (global install convention), webServer on :4173
-- Deploy skeleton: nginx:alpine behind shared Traefik at critters.dev.kkhost.pl
+- Deploy skeleton: local nginx/Traefik docker setup (later retired in favor of GitHub Pages)

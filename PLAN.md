@@ -25,7 +25,7 @@ Theme: Polish fauna (mouse, hare, hamster, deer, frog, stork, owl, fox, crow, ca
 | Inspector | Click any entity (plant/animal) → panel with all its live parameters; selected entity highlighted |
 | Saves | In-browser autosave (IndexedDB) + "New World" button to regenerate |
 | Perf | No hard limits for now; sim speed slider (0–8×) always available |
-| Location/deploy | `~/projects/sandbox/critterbox` → `critters.dev.kkhost.pl`; GitHub Pages (`kamilkrzywda.github.io/critterbox`) is a test mirror auto-deployed on push to master via `.github/workflows/deploy.yml` — critters.dev.kkhost.pl remains the local deployment |
+| Location/deploy | `~/projects/sandbox/critterbox` → GitHub Pages at https://kamilkrzywda.github.io/critterbox/, auto-deployed on push to master via `.github/workflows/deploy.yml` |
 | VCS | git, branch master, remote origin = github.com:kamilkrzywda/critterbox; nice commit packages per feature/phase; version in package.json (0.x.y); CHANGELOG.md history file; push after every verified milestone |
 
 ## Tech stack & conventions
@@ -34,7 +34,7 @@ Theme: Polish fauna (mouse, hare, hamster, deer, frog, stork, owl, fox, crow, ca
 - Three.js with version-matched @types/three; no framework; no asset pipeline — everything procedural
 - `sim/` is pure TS: never imports three.js or touches the DOM → headlessly testable (tsc-compiles to CJS, runs under Node)
 - Playwright global install per sandbox convention (not in package.json); workers 1, retries 1; webServer = `npm run build && vite preview --port 4173 --strictPort`
-- Deploy: nginx:alpine bind-mounting ./dist (ro) behind shared Traefik, Host(critters.dev.kkhost.pl) — see ../PROXY.md
+- Deploy: GitHub Pages via `.github/workflows/deploy.yml` on push to master (npm ci → build → actions/deploy-pages); served at https://kamilkrzywda.github.io/critterbox/
 - Deterministic RNG everywhere: stateless per-agent hash randomness (Sandfall's cellRand pattern → agentRand(id, stepSeed))
 
 ## File layout
@@ -134,7 +134,7 @@ Free-flight: WASD move relative to view, mouse-drag look (no pointer lock — to
 - Check sections: worldgen determinism; plant growth/regrowth cycle; grazing depletes + regrows; predator–prey stability over N steps (oscillates, no extinction); corpse decay + scavenging; breeding gates & inheritance drift; energy conservation sanity (no free energy except sunlight→plants)
 - Long-run harness: 20k+ step run asserting all core species survive with population bounds; prints min/max/avg per species stability report
 - Playwright e2e (global install): page loads, world generates deterministically from seed, camera responds to keys, speed slider changes sim rate, inspector opens on click — via window.__critterbox debug surface
-- Per-feature gate: sim-check → tsc --noEmit → build → playwright → deploy proof (`curl -H "Host: critters.dev.kkhost.pl"`) → commit + push
+- Per-feature gate: sim-check → tsc --noEmit → build → playwright → commit + push → deploy proof (`curl -sI https://kamilkrzywda.github.io/critterbox/` → 200; Pages may lag ~1 min after push)
 
 ## Roadmap
 
