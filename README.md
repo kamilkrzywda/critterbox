@@ -4,20 +4,9 @@ Browser-based 3D animal-ecosystem simulation: a procedurally generated heightmap
 
 `PLAN.md` at the repo root is the single source of truth for design decisions and roadmap; `CHANGELOG.md` tracks released versions (Keep-a-Changelog format).
 
-## Current state (v0.9.0)
+## Current state
 
-All roadmap phases 0–8 are implemented:
-
-- **Worldgen** — seeded fBm heightmap, biomes (meadow/forest/marsh/grassland), fixed water level carving rivers/lakes; size-at-gen dialog (100–800 m, default 300) with seed input and "New World" rebuild
-- **Camera** — free-flight: WASD move, mouse-drag look (no pointer lock), arrow-key rotation, Shift ×4, wheel dolly; Space pause
-- **Agent core + plants** — energy model, spatial hash grid, plant stage machine (seedling → growing → fruiting → regrowth → senescence), instanced rendering, population panel with live counts per species
-- **Herbivores** — mouse, hare, hamster, deer + insect pollinators; grazing with plant regrowth, breeding gates, sexes, trait inheritance with mutation
-- **Predators & scavengers** — fox, stork, owl, crow + frog; hunger-gated hunting with saturating intake; corpses decay and are scavenged (fox/crow)
-- **Aquatic** — carp (river omnivore) + pike (river predator) in the river volume, incl. the frog–pike waterline interaction
-- **Day/night + weather** — "settings animator" layer: light gates photosynthesis, temperature drives metabolism + a breeding cold-snap gate, rain boosts plant fertility; seeded Markov weather chain; scene lighting follows the clock
-- **Polish** — sim-speed slider (0–8×, persisted to localStorage; 0 = pause, synced with Space + PAUSED overlay), IndexedDB autosave every 30 s (activity-gated, gzip in a dedicated worker, restore-on-load before first render, "New World" overwrites the save), entity inspector (click any plant/animal → side panel with all live parameters, ~10 Hz; highlight ring on the selected agent; Esc / empty-click deselects)
-
-Not yet implemented (stretch): wolf (top predator), beaver (terrain modifier!), moose; evolution v2 — NEAT-style brains behind a pluggable "brain" interface.
+See [CHANGELOG.md](CHANGELOG.md) for what's implemented and the full release history; stretch goals live in PLAN.md.
 
 ## Tech stack
 

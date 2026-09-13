@@ -2,6 +2,11 @@
 
 All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 
+## [0.12.1] - 2026-09-13
+
+### Changed
+- The world-gen overlay subtitle no longer hardcodes a version + feature list (it was stuck at v0.11.0) — it now shows only the live version pulled from package.json at build time, so it can never go stale again; the version is also a link to the GitHub CHANGELOG.md
+
 ## [0.12.0] - 2026-09-13
 
 ### Added

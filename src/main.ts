@@ -199,6 +199,19 @@ if (envContainer) {
   initEnvPanel(envContainer, () => sim ? sim.environment : null);
 }
 
+// Version tag in the world-gen overlay — pulled from package.json at build time so it can never go stale,
+// and linked to the GitHub CHANGELOG.md. The anchor re-enables pointer events on itself only: #overlay is
+// click-through (pointer-events: none) so camera controls work over it.
+const subtitle = document.getElementById('subtitle');
+if (subtitle) {
+  const versionLink = document.createElement('a');
+  versionLink.href = 'https://github.com/kamilkrzywda/critterbox/blob/master/CHANGELOG.md';
+  versionLink.target = '_blank';
+  versionLink.rel = 'noopener noreferrer';
+  versionLink.textContent = `v${pkg.version}`;
+  subtitle.appendChild(versionLink);
+}
+
 // --- pause (Space) + sim-speed slider (Phase 8) ----------------------------------------------
 // The sim is frozen when Space-paused OR the speed slider sits at 0× — both show the PAUSED overlay, so
 // the two controls stay in sync: dragging to 0 pauses visually, and Space still toggles its own flag.
