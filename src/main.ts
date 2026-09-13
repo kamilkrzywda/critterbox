@@ -17,6 +17,7 @@ import { Sim } from './sim/sim';
 import { seedLife } from './sim/seedLife';
 import { PlantRenderer } from './render/plants';
 import { AnimalRenderer } from './render/animals';
+import { HoverHighlight } from './render/hoverHighlight';
 import { initPopulationPanel, type PopRow } from './ui/population';
 import { initEnvPanel } from './ui/envPanel';
 import { initInspectorPanel } from './ui/inspector';
@@ -139,6 +140,7 @@ function buildWorld(seed: number, size: number): World {
   scene.add(animalRenderer.object);
 
   selectedId = null; // ids restart at 1 in the new world — a stale selection would highlight an unrelated agent
+  setHoveredSpecies(null); // same for the hover layer — its rings point at the old world's agents
   frameWorld(world.size);
   refreshPanel?.(world.seed, world.size);
   return world;
@@ -177,7 +179,7 @@ refreshPanel = panel.setWorld;
 const popContainer = document.getElementById('population-panel');
 if (popContainer) {
   const rows: PopRow[] = [...PLANT_ROWS, { id: '§animals', name: 'animals', header: true }, ...ANIMAL_ROWS];
-  initPopulationPanel(popContainer, rows, () => sim?.populations() ?? {});
+  initPopulationPanel(popContainer, rows, () => sim?.populations() ?? {}, { onHoverSpecies: setHoveredSpecies });
 }
 
 // Environment indicator (Phase 7) — day/night phase + weather + temperature, refreshed ~4 Hz.
@@ -298,6 +300,18 @@ function updateSelectionMarker(): void {
   selectionMarker.visible = true;
 }
 
+// --- species-hover highlight (v0.10) -----------------------------------------------------------
+// Hover a population-panel row → one ring per live agent of that species (see render/hoverHighlight.ts).
+// Coexists with the inspector's selection ring — both are just id state, so neither clears the other.
+const hoverLayer = new HoverHighlight(scene);
+let hoveredSpecies: string | null = null;
+
+function setHoveredSpecies(id: string | null): void {
+  if (hoveredSpecies === id) return; // rows re-fire mouseover on every child span — stay idempotent
+  hoveredSpecies = id;
+  hoverLayer.setSpecies(id); // clearing zeroes the instances immediately, no frame needed
+}
+
 // Click-pick: a pointerup within 5 px of the pointerdown is a click (anything longer is a camera drag).
 const pickRaycaster = new THREE.Raycaster();
 const pickNdc = new THREE.Vector2();
@@ -368,6 +382,13 @@ declare global {
       selectAgent(id?: number | null): void;
       /** Currently selected agent id, or null when nothing is selected. */
       selected: number | null;
+      // v0.10: species-hover highlight surface (population-row hover without real mouse events)
+      /** Set the hovered population-row species (null/undefined → clear). Drives the ring layer directly. */
+      hoverSpecies(id?: string | null): void;
+      /** Currently hovered species id, or null when nothing is hovered. */
+      hoveredSpecies: string | null;
+      /** Live instance count of the hover ring layer — e2e asserts it equals the hovered population. */
+      hoverInstanceCount: number;
     };
   }
 }
@@ -431,6 +452,10 @@ async function boot(): Promise<void> {
     setSpeed(x: number): void { setSimSpeed(typeof x === 'number' && Number.isFinite(x) ? x : 1); },
     selectAgent(id?: number | null): void { selectAgentById(id ?? null); },
     get selected() { return selectedId; },
+    // v0.10: species-hover highlight surface.
+    hoverSpecies(id?: string | null): void { setHoveredSpecies(typeof id === 'string' ? id : null); },
+    get hoveredSpecies() { return hoveredSpecies; },
+    get hoverInstanceCount() { return hoverLayer.count; },
   };
 
   document.body.appendChild(renderer.domElement); // #scene visible ⇒ ready (e2e gate) — after the surface exists
@@ -464,6 +489,7 @@ function frame(now: number): void {
     accumulator = 0; // don't bank time while frozen — no burst on resume
   }
   updateSelectionMarker(); // Phase 8: the highlight ring follows the selected agent (cheap per-frame)
+  if (sim) hoverLayer.sync(sim.agents); // v0.10: refresh hovered-species rings — a no-op unless hovering
   updateSkyAndLights(); // Phase 7: sky + sun follow the day/night light curve (cheap per-frame lerps)
   renderer.render(scene, camera);
 }

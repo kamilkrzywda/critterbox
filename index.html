@@ -47,7 +47,7 @@
         position: fixed; left: 16px; bottom: 16px; width: 208px;
         color: #fff; font-family: system-ui, sans-serif; font-size: 13px;
         background: rgba(20, 28, 24, 0.75); border-radius: 8px; padding: 10px 12px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); user-select: none; pointer-events: none;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); user-select: none; pointer-events: auto; /* v0.10: rows are hoverable */
       }
       #population-panel .pop-title { font-weight: 600; margin-bottom: 6px; opacity: 0.9; }
       #population-panel .pop-section {
@@ -83,7 +83,7 @@
   <body>
     <div id="overlay">
       <h1 id="title">Critterbox</h1>
-      <p id="subtitle">v0.9.0 — living ecosystem under day/night & weather; autosave, speed control, entity inspector</p>
+      <p id="subtitle">v0.10.0 — living ecosystem under day/night & weather; autosave, speed control, entity inspector, hover-to-highlight species</p>
     </div>
     <div id="env-panel"></div>
     <div id="population-panel">

@@ -15,11 +15,17 @@ export interface PopulationData {
   [speciesId: string]: { count: number; avgEnergy: number };
 }
 
+export interface PopulationPanelOptions {
+  /** Called with the species id when a row is hovered, null when the pointer leaves all rows (v0.10 hover highlight). */
+  onHoverSpecies?: (id: string | null) => void;
+}
+
 /** Wire up the population panel inside `container`; returns a disposer for teardown. */
 export function initPopulationPanel(
   container: HTMLElement,
   rows: PopRow[],
   getData: () => PopulationData,
+  options: PopulationPanelOptions = {},
 ): { dispose(): void } {
   const rowEls = new Map<string, { count: HTMLElement; avg: HTMLElement }>();
 
@@ -67,9 +73,35 @@ export function initPopulationPanel(
   update(); // paint immediately so rows are visible before the first interval tick
   const timer = window.setInterval(update, 250); // ~4 Hz
 
+  // Hover highlight wiring (v0.10): event DELEGATION on the container instead of per-row listeners —
+  // rows are built once and only their text updates at ~4 Hz, but delegation keeps exactly one listener
+  // pair no matter how often the row set is ever rebuilt (no leaks/duplicates across panel updates).
+  let over: ((e: MouseEvent) => void) | null = null;
+  let out: ((e: MouseEvent) => void) | null = null;
+  if (options.onHoverSpecies) {
+    const onHover = options.onHoverSpecies;
+    /** Species id of the row under `el`, or null for headers/dividers/outside. */
+    const rowId = (el: EventTarget | null): string | null => {
+      const r = el instanceof HTMLElement ? el.closest<HTMLElement>('.pop-row') : null;
+      return r?.dataset.species ?? null;
+    };
+    over = (e) => onHover(rowId(e.target));
+    out = (e) => {
+      if (rowId(e.relatedTarget)) return; // still inside some row — its mouseover will update the hover
+      onHover(null);
+    };
+    container.addEventListener('mouseover', over);
+    container.addEventListener('mouseout', out);
+  }
+
   return {
     dispose(): void {
       window.clearInterval(timer);
+      if (over && out) {
+        container.removeEventListener('mouseover', over);
+        container.removeEventListener('mouseout', out);
+      }
+      options.onHoverSpecies?.(null); // a disposed panel can't keep a species hovered
       container.innerHTML = '';
     },
   };

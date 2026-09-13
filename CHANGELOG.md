@@ -2,7 +2,11 @@
 
 All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 
-## [Unreleased]
+## [0.10.0] - 2026-09-13
+
+### Added
+- Hover a population-panel row → highlight ALL agents of that species: an InstancedMesh ring layer (`src/render/hoverHighlight.ts`) reusing the inspector's selection-ring geometry (TorusGeometry(2, 0.15, 8, 32), laid flat) with a distinct cyan tint at ~55% opacity so "many" reads differently from the single active gold selection; one instance per live agent, positions refreshed each frame while hovered and zero cost otherwise. Initial capacity 640 (just above the insect popCap of 600 — the largest animal population), growing on demand like AnimalRenderer's for plant populations and never shrinking back. Rows are wired via event delegation on the panel container (one mouseover/mouseout pair — no per-row listeners to leak or duplicate across the ~4 Hz text updates; header dividers can't be hovered); hover coexists with an active inspector selection and clears itself on New World. The panel gains `pointer-events: auto` so rows are actually hoverable
+- Debug surface additions: `hoverSpecies(id | null)` / `hoveredSpecies` / `hoverInstanceCount` — e2e drives the layer deterministically without real mouse events; new lean hover spec (sim frozen, ring count === live population, coexists with a selection, null clears synchronously)
 
 ### Changed
 - Plant display names to English across UI, species modules and docs (Grass/Clover/Cranberry/Reed/Tree) — no Polish tokens remain anywhere in code or documentation
