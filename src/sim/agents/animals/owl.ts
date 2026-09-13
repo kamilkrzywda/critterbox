@@ -21,7 +21,7 @@ import type { AnimalSpecies } from './base';
 export const OWL: AnimalSpecies = {
   id: 'owl',
   kind: 'animal',
-  displayName: 'Owl',
+  displayName: 'owl',
   traits: {
     speed: { min: 0.8, max: 1.3, sigma: 0.1 },
     size: { min: 1.5, max: 2.2, sigma: 0.15 },

@@ -28,7 +28,7 @@ export const TREE_MIN_TOTAL_HEIGHT = 8;
 export const TREE: PlantSpecies = {
   id: 'tree',
   kind: 'plant',
-  displayName: 'Tree',
+  displayName: 'tree',
   baseGrowthRate: 0.25, // slow — trees take their time to reach full canopy
   maxEnergy: 400,
   lifespan: 36000, // ~20 min — the longest-lived agents in Phase 3

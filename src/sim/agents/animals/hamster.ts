@@ -18,7 +18,7 @@ import type { AnimalSpecies } from './base';
 export const HAMSTER: AnimalSpecies = {
   id: 'hamster',
   kind: 'animal',
-  displayName: 'Hamster',
+  displayName: 'hamster',
   traits: {
     speed: { min: 0.7, max: 1.2, sigma: 0.1 },
     size: { min: 1.0, max: 1.6, sigma: 0.15 },

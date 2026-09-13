@@ -31,7 +31,7 @@ const NECTAR_BIOMASS = 12;
 export const INSECT: AnimalSpecies = {
   id: 'insect',
   kind: 'animal',
-  displayName: 'Insect',
+  displayName: 'insect',
   traits: {
     speed: { min: 1.0, max: 2.0, sigma: 0.15 },
     size: { min: 0.2, max: 0.4, sigma: 0.06 },

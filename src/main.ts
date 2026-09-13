@@ -30,27 +30,27 @@ const DEFAULT_SIZE = 300;
 
 /** Species shown in the population panel: plants, then an animals section (Phase 4). */
 const PLANT_ROWS: PopRow[] = [
-  { id: 'grass', name: 'Grass' },
-  { id: 'clover', name: 'Clover' },
-  { id: 'cranberry', name: 'Cranberry' },
-  { id: 'reed', name: 'Reed' },
-  { id: 'tree', name: 'Tree' },
+  { id: 'grass', name: 'grass' },
+  { id: 'clover', name: 'clover' },
+  { id: 'cranberry', name: 'cranberry' },
+  { id: 'reed', name: 'reed' },
+  { id: 'tree', name: 'tree' },
 ];
 const ANIMAL_ROWS: PopRow[] = [
-  { id: 'mouse', name: 'Mouse' },
-  { id: 'hare', name: 'Hare' },
-  { id: 'hamster', name: 'Hamster' },
-  { id: 'deer', name: 'Deer' },
-  { id: 'insect', name: 'Insect' },
+  { id: 'mouse', name: 'mouse' },
+  { id: 'hare', name: 'hare' },
+  { id: 'hamster', name: 'hamster' },
+  { id: 'deer', name: 'deer' },
+  { id: 'insect', name: 'insect' },
   // Phase 5: frogs + the predator/scavenger layer
-  { id: 'frog', name: 'Frog' },
-  { id: 'fox', name: 'Fox' },
-  { id: 'stork', name: 'Stork' },
-  { id: 'owl', name: 'Owl' },
-  { id: 'crow', name: 'Crow' },
+  { id: 'frog', name: 'frog' },
+  { id: 'fox', name: 'fox' },
+  { id: 'stork', name: 'stork' },
+  { id: 'owl', name: 'owl' },
+  { id: 'crow', name: 'crow' },
   // Phase 6: the aquatic layer — carp + pike in the river volume
-  { id: 'carp', name: 'Carp' },
-  { id: 'pike', name: 'Pike' },
+  { id: 'carp', name: 'carp' },
+  { id: 'pike', name: 'pike' },
 ];
 
 // --- renderer / scene -------------------------------------------------------------------

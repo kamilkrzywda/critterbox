@@ -38,7 +38,7 @@ const REED_PREFERENCE = 0.5;
 export const CARP: AnimalSpecies = {
   id: 'carp',
   kind: 'animal',
-  displayName: 'Carp',
+  displayName: 'carp',
   traits: {
     speed: { min: 0.7, max: 1.3, sigma: 0.1 },
     size: { min: 2.0, max: 4.0, sigma: 0.25 },

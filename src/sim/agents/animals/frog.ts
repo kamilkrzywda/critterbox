@@ -28,7 +28,7 @@ function inMarshZone(sim: Sim, x: number, z: number): boolean {
 export const FROG: AnimalSpecies = {
   id: 'frog',
   kind: 'animal',
-  displayName: 'Frog',
+  displayName: 'frog',
   traits: {
     speed: { min: 0.7, max: 1.3, sigma: 0.1 },
     size: { min: 0.8, max: 1.4, sigma: 0.12 },

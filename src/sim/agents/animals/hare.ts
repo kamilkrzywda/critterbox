@@ -18,7 +18,7 @@ import type { AnimalSpecies } from './base';
 export const HARE: AnimalSpecies = {
   id: 'hare',
   kind: 'animal',
-  displayName: 'Hare',
+  displayName: 'hare',
   traits: {
     speed: { min: 0.8, max: 1.3, sigma: 0.1 },
     size: { min: 1.5, max: 2.5, sigma: 0.2 },

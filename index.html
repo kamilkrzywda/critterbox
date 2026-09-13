@@ -69,7 +69,7 @@
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); user-select: none; pointer-events: none;
         display: flex; gap: 10px; align-items: baseline;
       }
-      #env-panel .env-phase { font-weight: 600; text-transform: capitalize; }
+      #env-panel .env-phase { font-weight: 600; }
       #env-panel .env-weather { opacity: 0.9; }
       #env-panel .env-temp { opacity: 0.7; font-variant-numeric: tabular-nums; }
       #inspector-panel {
@@ -91,21 +91,21 @@
     </div>
     <div id="env-panel"></div>
     <div id="population-panel">
-      <div class="pop-title">Population</div>
+      <div class="pop-title">population</div>
     </div>
     <div id="paused-overlay">PAUSED</div>
     <div id="inspector-panel"></div>
     <div id="world-panel">
-      <label for="speed-slider">Speed: <span id="speed-label">1×</span></label>
+      <label for="speed-slider">speed: <span id="speed-label">1×</span></label>
       <input type="range" id="speed-slider" min="0" max="8" step="1" value="1" />
       <div class="panel-divider"></div>
-      <label for="size-slider">Size: <span id="size-label">300 m</span></label>
+      <label for="size-slider">size: <span id="size-label">300 m</span></label>
       <input type="range" id="size-slider" min="100" max="800" step="25" value="300" />
       <div class="row">
-        <label for="seed-input">Seed:</label>
+        <label for="seed-input">seed:</label>
         <input type="text" id="seed-input" value="1337" spellcheck="false" />
       </div>
-      <button id="new-world-btn">New World</button>
+      <button id="new-world-btn">new world</button>
       <p id="world-info">seed 1337 · 300 m</p>
     </div>
     <script type="module" src="/src/main.ts"></script>

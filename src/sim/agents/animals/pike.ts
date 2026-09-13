@@ -30,7 +30,7 @@ const PIKE_FROG_STRIKE_SHALLOW = 2; // the marsh band runs to +3 — pike strike
 export const PIKE: AnimalSpecies = {
   id: 'pike',
   kind: 'animal',
-  displayName: 'Pike',
+  displayName: 'pike',
   traits: {
     speed: { min: 0.9, max: 1.4, sigma: 0.1 },
     size: { min: 1.5, max: 3.0, sigma: 0.2 },

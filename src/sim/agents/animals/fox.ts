@@ -23,7 +23,7 @@ import { scavengerDecide } from '../../corpses';
 export const FOX: AnimalSpecies = {
   id: 'fox',
   kind: 'animal',
-  displayName: 'Fox',
+  displayName: 'fox',
   traits: {
     speed: { min: 0.9, max: 1.4, sigma: 0.1 },
     size: { min: 1.8, max: 2.6, sigma: 0.2 },

@@ -19,7 +19,7 @@ import type { AnimalSpecies } from './base';
 export const MOUSE: AnimalSpecies = {
   id: 'mouse',
   kind: 'animal',
-  displayName: 'Mouse',
+  displayName: 'mouse',
   traits: {
     speed: { min: 0.8, max: 1.4, sigma: 0.12 },
     size: { min: 0.7, max: 1.3, sigma: 0.15 },

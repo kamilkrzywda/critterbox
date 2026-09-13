@@ -10,7 +10,7 @@ import { BIOME_MARSH } from '../../../worldgen/worldgen';
 export const CRANBERRY: PlantSpecies = {
   id: 'cranberry',
   kind: 'plant',
-  displayName: 'Cranberry',
+  displayName: 'cranberry',
   baseGrowthRate: 0.35,
   maxEnergy: 120,
   lifespan: 9000, // ~5 min

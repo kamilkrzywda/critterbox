@@ -10,7 +10,7 @@ import { BIOME_MEADOW } from '../../../worldgen/worldgen';
 export const CLOVER: PlantSpecies = {
   id: 'clover',
   kind: 'plant',
-  displayName: 'Clover',
+  displayName: 'clover',
   baseGrowthRate: 0.4,
   maxEnergy: 90,
   lifespan: 7200, // ~4 min

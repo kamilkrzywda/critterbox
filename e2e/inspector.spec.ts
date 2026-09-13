@@ -40,8 +40,8 @@ test('inspector: selectAgent opens the panel with live params, Esc deselects', a
   expect(await selectedId(page)).toBe(ids.plantId);
   await expect(panel).toBeVisible();
   let text = (await panel.textContent()) ?? '';
-  expect(text).toMatch(/Species/);
-  expect(text).toMatch(/Energy/);
+  expect(text).toMatch(/species/);
+  expect(text).toMatch(/energy/);
 
   // Esc closes / deselects.
   await page.keyboard.press('Escape');
@@ -53,9 +53,9 @@ test('inspector: selectAgent opens the panel with live params, Esc deselects', a
   expect(await selectedId(page)).toBe(ids.animalId);
   await expect(panel).toBeVisible();
   text = (await panel.textContent()) ?? '';
-  expect(text).toMatch(/Mouse/);
-  expect(text).toMatch(/Sex/);
-  expect(text).toMatch(/Energy/);
+  expect(text).toMatch(/mouse/);
+  expect(text).toMatch(/sex/);
+  expect(text).toMatch(/energy/);
 
   // selectAgent(null) deselects too.
   await page.evaluate(() => (window as unknown as { __critterbox: Critterbox }).__critterbox.selectAgent(null));

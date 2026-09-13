@@ -21,7 +21,7 @@ import type { AnimalSpecies } from './base';
 export const DEER: AnimalSpecies = {
   id: 'deer',
   kind: 'animal',
-  displayName: 'Deer',
+  displayName: 'deer',
   traits: {
     speed: { min: 0.7, max: 1.2, sigma: 0.1 },
     size: { min: 3.5, max: 5.5, sigma: 0.4 },

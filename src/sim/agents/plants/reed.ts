@@ -10,7 +10,7 @@ import { BIOME_MARSH } from '../../../worldgen/worldgen';
 export const REED: PlantSpecies = {
   id: 'reed',
   kind: 'plant',
-  displayName: 'Reed',
+  displayName: 'reed',
   baseGrowthRate: 0.45,
   maxEnergy: 110,
   lifespan: 6000, // ~4 min

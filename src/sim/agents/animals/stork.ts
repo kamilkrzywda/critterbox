@@ -28,7 +28,7 @@ function inStorkZone(sim: Sim, x: number, z: number): boolean {
 export const STORK: AnimalSpecies = {
   id: 'stork',
   kind: 'animal',
-  displayName: 'Stork',
+  displayName: 'stork',
   traits: {
     speed: { min: 0.8, max: 1.3, sigma: 0.1 },
     size: { min: 2.5, max: 3.5, sigma: 0.2 },

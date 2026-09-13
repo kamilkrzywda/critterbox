@@ -16,7 +16,7 @@ export function initInspectorPanel(
 ): { dispose(): void } {
   const title = document.createElement('div');
   title.className = 'insp-title';
-  title.textContent = 'Inspector';
+  title.textContent = 'inspector';
   container.appendChild(title);
 
   const body = document.createElement('div');
@@ -29,15 +29,15 @@ export function initInspectorPanel(
   function render(a: Agent): void {
     const sp = getSpecies(a.species);
     const data: [string, string][] = [];
-    data.push(['Species', sp?.displayName ?? a.species]);
-    if (a.sex) data.push(['Sex', a.sex === 'm' ? 'male' : 'female']); // animals only — plants have no sex
-    data.push(['Age', `${Math.floor(a.age)} ticks`]);
-    data.push(['Energy', a.energy.toFixed(1)]);
-    data.push(['State', a.state]);
+    data.push(['species', sp?.displayName ?? a.species]);
+    if (a.sex) data.push(['sex', a.sex === 'm' ? 'male' : 'female']); // animals only — plants have no sex
+    data.push(['age', `${Math.floor(a.age)} ticks`]);
+    data.push(['energy', a.energy.toFixed(1)]);
+    data.push(['state', a.state]);
     if (a.traits) {
       for (const k of Object.keys(a.traits).sort()) data.push([k, a.traits[k].toFixed(2)]); // every trait value
     }
-    data.push(['Position', `${a.pos.x.toFixed(1)}, ${a.pos.y.toFixed(1)}, ${a.pos.z.toFixed(1)}`]);
+    data.push(['position', `${a.pos.x.toFixed(1)}, ${a.pos.y.toFixed(1)}, ${a.pos.z.toFixed(1)}`]);
 
     const key = data.map((d) => d[0]).join('\n');
     if (key !== lastKey) { // row set changed → rebuild the DOM rows once

@@ -10,7 +10,7 @@ import { BIOME_FOREST, BIOME_GRASSLAND, BIOME_MARSH, BIOME_MEADOW } from '../../
 export const GRASS: PlantSpecies = {
   id: 'grass',
   kind: 'plant',
-  displayName: 'Grass',
+  displayName: 'grass',
   baseGrowthRate: 0.5, // ~150 ticks to fruiting at full fertility+light
   maxEnergy: 100,
   lifespan: 5400, // ~3 min of sim time before senescence
