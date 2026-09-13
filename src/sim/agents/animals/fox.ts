@@ -47,7 +47,9 @@ export const FOX: AnimalSpecies = {
   roostAnchored: true, // unanchored random-walk diffusion carried foxes into "prey deserts" between mouse clusters
   popCap: 24,
   foodSpecies: [], // carnivore — prey + corpses only
-  preySpecies: ['mouse', 'hare', 'frog'],
+  preySpecies: ['mouse', 'hare', 'frog'], // v0.12: ducks were on this menu but a slow-breeding cap-14 species can't
+  // sustain apex-predator pressure in the sim's dynamics (20k-step forensics: foxes stripped the founding cluster
+  // faster than clutches replaced it → extinction). Ducks are now a predator-free niche player.
   bodySize: [0.4, 0.5, 0.85], // world-space meters at mid size trait → rendered 0.38–0.63 m high, 0.64–1.06 m long incl. tail (a real fox)
   decide: scavengerDecide, // corpse first when hungry, then prey — see corpses.ts
   activityLevel: (sim) => 0.3 + 0.7 * sim.environment.light, // Phase 7: DIURNAL — full foraging by day, reduced at night

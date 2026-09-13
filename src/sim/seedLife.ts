@@ -8,7 +8,11 @@
  * (~250 in groups of 10 near flowers anywhere on dry land). Phase 5 adds H frogs (~40) on marsh/water-edge
  * cells, I foxes (~6) on meadow/forest-edge, J storks (~4) on marsh, K owls (~4) in forest, L crows (~8)
  * anywhere on dry land. The new passes come AFTER G so the shared PRNG stream — and thus every Phase 3/4
- * agent's position — is byte-identical to before. Sexes mixed via agentRand.
+ * agent's position — is byte-identical to before. Sexes mixed via agentRand. v0.12 adds A2 aquatic plants
+ * (algae mats / pondweed beds / water lily pads in water cells, after pass B), O roach families (~48)
+ * scattered deep, P trout pairs (up to ~6 — one per swim-volume basin that holds a sufficient local roach base),
+ * Q duck families (~12) on the marsh band —
+ * and drops the carp shore-food anchor (pass M): with in-water food everywhere, any deep cell works.
  */
 
 import type { World } from '../worldgen/worldgen';
@@ -32,7 +36,11 @@ import { OWL } from './agents/animals/owl';
 import { CROW } from './agents/animals/crow';
 import { CARP } from './agents/animals/carp';
 import { PIKE } from './agents/animals/pike';
-import { AQUATIC_SEED_DEPTH, initAquaticAgent } from './agents/animals/aquatic';
+// v0.12: the widened river food chain — small forage fish, mid predator, semi-aquatic duck
+import { ROACH } from './agents/animals/roach';
+import { TROUT } from './agents/animals/trout';
+import { DUCK } from './agents/animals/duck';
+import { AQUATIC_SEED_DEPTH, initAquaticAgent, riverComponentAt } from './agents/animals/aquatic';
 
 /** Salt mixed into the world seed for the life-seeding PRNG (keeps it distinct from noise offsets). */
 const LIFE_SALT = 0x5eed;
@@ -73,12 +81,25 @@ const CARP_FAMILY_SIZE = 3;
 const PIKE_FAMILIES = 3; // pike family clusters placed near carp in the water (~6 total, guaranteed mixed sexes —
 // individually scattered pike drifted apart before breeding and went extinct on old age (Phase 6 stability tuning)
 const PIKE_FAMILY_SIZE = 2;
-/** Meters above the water line a plant may sit and still be reachable from the swim line (mirrors CARP_SHORE_REACH). */
-const AQUATIC_SEED_SHORE_REACH = 3;
-/** A carp family must anchor within this of an edible shore plant: a carp seeded in open water far from any
- *  bank starves (its diet is shore plants + waterline insects), and the early strandings thinned the prey
- *  patches until pike stranded too (Phase 6 stability forensics). Directional foraging covers the last stretch. */
-const AQUATIC_SEED_FOOD_REACH = 40;
+// v0.12: aquatic plants seed at ~half their exclusion-radius carrying capacity — self-seeding then has room
+// to spread ("flowing on water and just spreading around") without blowing past the stability check's 8× bound.
+// Densities are tuned HIGH (v0.12 stability forensics): carp + roach compete for the same in-water plants, and
+// a thin base lets the carp (which have a shore-plant fallback diet) out-compete the roach into starvation —
+// a fat, fast-regrowing plant base is what keeps both fish populations fed.
+const ALGAE_DENSITY = 0.07; // per open-water cell (depth ≥ 0.15 m)
+const PONDWEED_DENSITY = 0.025; // per deep-enough cell (depth 0.6–3.5 m — the bottom + light window)
+const WATERLILY_DENSITY = 0.02; // per mid-depth cell (depth 0.5–2.5 m)
+// v0.12: the widened river food chain (families in deep cells, like carp/pike).
+const ROACH_FAMILIES = 12; // roach family clusters scattered across the water (~48 total — the river's "mouse").
+// Seeded above the vulnerable zone on purpose (v0.12 stability forensics): trout are anchored near roach patches, so
+// the first ticks deliver a predation PULSE that strips each local cluster. A base of ~48 survives the pulse with
+// enough breeders left to rebuild; at ~32 the pulse dropped the population below mate-finding density and it never
+// recovered (the synchronized old-age wave of the founding cohort then finished what predation started).
+const ROACH_FAMILY_SIZE = 4;
+const TROUT_TARGET = 6; // trout placed near roach patches (their prey), in pairs — an upper bound: pass P places at most ONE pair per
+// swim-volume basin with a sufficient local roach base, so on a two-basin world only four land (see pass P)
+const DUCK_FAMILIES = 4; // duck family clusters on the marsh band (~12 total)
+const DUCK_FAMILY_SIZE = 3;
 /** Prey clusters seeded in the PIKE'S water body (the largest basin, see pass M2/N): pike relocate their
  *  roost whenever they end up >2×wanderRadius from it, so a scattered prey field gets hunted down patch by
  *  patch — every cluster converges on and strips the last surviving one before it can breed back (Phase 6
@@ -125,6 +146,11 @@ export function seedLife(sim: Sim): SeedStats {
       // keeps age=0 → seedling fraction and the max drawn age (0.8×lifespan) → just past every species'
       // fruiting threshold (≤ 0.82 vs thresholds 0.7–0.8), so no plant starts senescent (senescence ≥ 0.85).
       a.energy = ps.maxEnergy * (0.1 + 0.9 * (a.age / ps.lifespan));
+      // v0.12: aquatic plants sit at their species' seat from the first frame (surface floaters / bottom-anchored) —
+      // updatePlant re-seats them every tick anyway, but the initial render must not flash a lily pad on the lake floor.
+      if (ps.aquatic) {
+        a.pos.y = ps.aquatic.seat === 'surface' ? world.waterLevel : world.heightAt(a.pos.x, a.pos.z);
+      }
     }
     perSpecies[speciesId] = (perSpecies[speciesId] ?? 0) + 1;
     total++;
@@ -177,21 +203,14 @@ export function seedLife(sim: Sim): SeedStats {
     }
   };
 
-  /** True when a cell is deep enough to SEED an aquatic agent (height < waterLevel − AQUATIC_SEED_DEPTH). */
-  const isDeepCell = (x: number, z: number): boolean => world.heightAt(x, z) < world.waterLevel - AQUATIC_SEED_DEPTH;
-
-  /** Shore plants a carp can eat from the swim line (pass A has run — the list is complete by pass M). */
-  let shorePlants: { x: number; z: number }[] = [];
-  const CARP_SHORE_FOOD = ['reed', 'grass', 'clover', 'cranberry']; // mirrors CARP.foodSpecies
-  /** True when (x,z) sits within AQUATIC_SEED_FOOD_REACH of an edible shore plant (see the constant). */
-  const nearShoreFood = (x: number, z: number): boolean => {
-    const r2 = AQUATIC_SEED_FOOD_REACH * AQUATIC_SEED_FOOD_REACH;
-    for (const p of shorePlants) {
-      const dx = p.x - x;
-      const dz = p.z - z;
-      if (dx * dx + dz * dz <= r2) return true;
-    }
-    return false;
+  /** True when a cell is deep enough to SEED an aquatic agent (height < waterLevel − AQUATIC_SEED_DEPTH). Out-of-bounds
+   *  points are rejected: heightAt clamps them onto the edge cell, so a family anchored past the world border would pass
+   *  the depth test and seed members outside the map — they start in no swim-volume component (riverComponentAt = -1),
+   *  can't target any prey until they wander back in, and their roost stays pinned to the edge forever (v0.12 forensics:
+   *  a whole trout pair seeded at x≈154 on a 300 m world). */
+  const isDeepCell = (x: number, z: number): boolean => {
+    if (x < -halfW || x >= halfW || z < -halfD || z >= halfD) return false;
+    return world.heightAt(x, z) < world.waterLevel - AQUATIC_SEED_DEPTH;
   };
 
   /** Place a small family cluster of an aquatic species around a deep river cell: n members within ~8 m,
@@ -219,7 +238,8 @@ export function seedLife(sim: Sim): SeedStats {
     return members.length;
   };
 
-  /** Rejection-sample a DEEP river cell NEAR an edible shore plant and place one aquatic family there. */
+  /** Rejection-sample a DEEP river cell and place one aquatic family there. (v0.12: no shore-food anchor —
+   *  the in-water plants pass A2 seeds across the whole water body, so any deep cell has food nearby.) */
   const placeAquaticFamilyInRiver = (sp: AnimalSpecies, n: number): void => {
     for (let guard = 0; guard < 200; guard++) {
       const x = Math.floor(rng() * w);
@@ -227,7 +247,6 @@ export function seedLife(sim: Sim): SeedStats {
       const cx = x - halfW + 0.5;
       const cz = z - halfD + 0.5;
       if (!isDeepCell(cx, cz)) continue; // deep river cells only
-      if (!nearShoreFood(cx, cz)) continue; // a family anchored in open water starves — see AQUATIC_SEED_FOOD_REACH
       placeAquaticFamily(sp, cx, cz, n);
       return;
     }
@@ -274,6 +293,29 @@ export function seedLife(sim: Sim): SeedStats {
       if (world.biomeAt(jx, jz) !== BIOME_FOREST) continue;
       if (world.heightAt(jx, jz) < world.waterLevel) continue;
       place('tree', jx, jz, pickTreeVariant(rng));
+    }
+  }
+
+  // --- Pass A2: aquatic plants in water cells (v0.12) ----------------------------------------------
+  // Algae mats on any open surface, pondweed beds where there is a real bottom + light, water lily pads in
+  // mid-depth water — the in-water food base that keeps carp/roach foraging across open water instead of
+  // parking at the bank (see CARP's module header). Densities seed each species near half its carrying
+  // capacity so self-seeding has room to spread without blowing past the stability check's plant bound.
+  for (let z = 0; z < d; z++) {
+    const wz = z - halfD + 0.5; // cell centre in centered meters
+    for (let x = 0; x < w; x++) {
+      const i = z * w + x;
+      const h = world.heights[i];
+      if (h >= world.waterLevel) continue; // dry land — pass A handled it
+      const wx = x - halfW + 0.5;
+      const depth = world.waterLevel - h;
+      if (depth >= 0.15 && rng() < ALGAE_DENSITY) {
+        place('algae', wx + (rng() - 0.5), wz + (rng() - 0.5));
+      } else if (depth >= 0.6 && depth <= 3.5 && rng() < PONDWEED_DENSITY) {
+        place('pondweed', wx + (rng() - 0.5), wz + (rng() - 0.5));
+      } else if (depth >= 0.5 && depth <= 2.5 && rng() < WATERLILY_DENSITY) {
+        place('waterlily', wx + (rng() - 0.5), wz + (rng() - 0.5));
+      }
     }
   }
 
@@ -403,17 +445,9 @@ export function seedLife(sim: Sim): SeedStats {
     }
   }
 
-  // --- Pass M: carp FAMILIES in deep river cells near shore plants (~35 in 14 family clusters) ----------
-  // The anchor cell must be deep AND within AQUATIC_SEED_FOOD_REACH of an edible shore plant (reed/grass/
-  // clover/cranberry at the waterline): a carp seeded in open water far from any bank has nothing to eat and
-  // starves, thinning the prey base until pike strand too (Phase 6 stability forensics).
-  shorePlants = [];
-  for (const a of sim.agents) {
-    if (!CARP_SHORE_FOOD.includes(a.species)) continue;
-    if (world.heightAt(a.pos.x, a.pos.z) < world.waterLevel + AQUATIC_SEED_SHORE_REACH) {
-      shorePlants.push({ x: a.pos.x, z: a.pos.z });
-    }
-  }
+  // --- Pass M: carp FAMILIES in deep river cells (~35 in 14 family clusters) --------------------------
+  // (v0.12: the shore-food anchor is gone — pass A2 seeded algae/pondweed across the whole water body, so any
+  //  deep cell has in-water food within foraging range and carp no longer strand at the bank.)
   for (let f = 0; f < CARP_FAMILIES; f++) {
     placeAquaticFamilyInRiver(CARP, CARP_FAMILY_SIZE);
   }
@@ -438,7 +472,7 @@ export function seedLife(sim: Sim): SeedStats {
   }
   const carpClusters: { x: number; z: number }[] = []; // dense prey clusters in the pike's basin — pass N anchors one pike pair per cluster
   if (pikeComponent >= 0) {
-    // Pick PIKE_PREY_CLUSTERS anchor points ≥30 m apart, deep + near shore food inside the chosen component.
+    // Pick PIKE_PREY_CLUSTERS anchor points ≥30 m apart, deep inside the chosen component.
     for (let guard = 0; carpClusters.length < PIKE_PREY_CLUSTERS && guard < 400; guard++) {
       const x = Math.floor(rng() * w);
       const z = Math.floor(rng() * d);
@@ -446,7 +480,6 @@ export function seedLife(sim: Sim): SeedStats {
       const cz = z - halfD + 0.5;
       if (!isDeepCell(cx, cz)) continue; // deep river cells only
       if (compOf[Math.floor(cz + halfD) * w + Math.floor(cx + halfW)] !== pikeComponent) continue;
-      if (!nearShoreFood(cx, cz)) continue; // a cluster far from any bank starves — see AQUATIC_SEED_FOOD_REACH
       let tooClose = false;
       for (const c of carpClusters) {
         const dx = c.x - cx;
@@ -485,6 +518,66 @@ export function seedLife(sim: Sim): SeedStats {
     const dist = rng() * 6; // inside the cluster — first meal within sense radius at t=0
     const toPlace = Math.min(PIKE_FAMILY_SIZE, PIKE_FAMILIES * PIKE_FAMILY_SIZE - pikePlaced); // never overshoot the cap
     pikePlaced += placeAquaticFamily(PIKE, c.x + Math.cos(ang) * dist, c.z + Math.sin(ang) * dist, toPlace);
+  }
+
+  // --- Pass O: roach FAMILIES scattered across the water (~40 in 10 family clusters) -------------------
+  // The small forage fish seed anywhere deep — their food (algae/pondweed) is everywhere in the water body.
+  for (let f = 0; f < ROACH_FAMILIES; f++) {
+    placeAquaticFamilyInRiver(ROACH, ROACH_FAMILY_SIZE);
+  }
+
+  // --- Pass P: trout pairs — one per swim-volume component with a sufficient local roach base --------------
+  // A trout seeded far from any roach starves (like the pike/carp pairing): anchor each pair 8–20 m from a real
+  // roach — close enough that first meals are within or just beyond sense radius at t=0, but NOT sitting on top
+  // of the cluster: trout placed directly on a family deliver an initial predation pulse that strips it before
+  // breeding ramps up (v0.12 stability forensics). Each swim-volume component is its own closed ecosystem (land
+  // barriers), so each gets AT MOST ONE pair — two pairs in one basin strip the local roach base faster than it
+  // breeds back while a single pair coexists with it (v0.12 stability forensics: seven trout against ~26 roach
+  // drove one basin's roach to zero by t≈7k and then starved). A component only qualifies when its SEEDED roach
+  // base is ≥ TROUT_MIN_ROACH — a thin basin can't sustain even one pair. Pairs also stay ≥ TROUT_SPACING apart
+  // (parallel channels that happen to share a component).
+  const TROUT_SPACING = 40;
+  /** Seeded roach a swim-volume component must hold before it may receive a trout pair. */
+  const TROUT_MIN_ROACH = 16;
+  const roachPool: Agent[] = [];
+  for (const a of sim.agents) if (a.species === 'roach') roachPool.push(a);
+  // Per-component SEEDED roach count — the true swim-volume components (riverComponentAt, AQUATIC_MIN_DEPTH),
+  // because that is the volume trout and roach can actually move in.
+  const roachPerComp = new Map<number, number>();
+  for (const r of roachPool) {
+    const c = riverComponentAt(sim, r.pos.x, r.pos.z);
+    if (c >= 0) roachPerComp.set(c, (roachPerComp.get(c) ?? 0) + 1);
+  }
+  const placedTrout: Array<{ x: number; z: number }> = [];
+  const troutComps = new Set<number>();
+  let troutPlaced = 0;
+  for (let guard = 0; troutPlaced < TROUT_TARGET && guard < TROUT_TARGET * 60; guard++) {
+    if (roachPool.length === 0) break; // no roach seeded (tiny world?) — skip the species
+    const prey = roachPool[Math.floor(rng() * roachPool.length)];
+    const ang = rng() * Math.PI * 2;
+    const dist = 8 + 12 * rng();
+    const cx = prey.pos.x + Math.cos(ang) * dist;
+    const cz = prey.pos.z + Math.sin(ang) * dist;
+    if (!isDeepCell(cx, cz)) continue; // deep river cells only (and in bounds — see isDeepCell)
+    const comp = riverComponentAt(sim, cx, cz);
+    if (comp < 0 || troutComps.has(comp) || (roachPerComp.get(comp) ?? 0) < TROUT_MIN_ROACH) continue; // one pair per basin, on a real roach base
+    let tooClose = false;
+    for (const pt of placedTrout) {
+      const dx = pt.x - cx, dz = pt.z - cz;
+      if (dx * dx + dz * dz < TROUT_SPACING * TROUT_SPACING) { tooClose = true; break; }
+    }
+    if (tooClose) continue; // keep pairs in separate basins where possible
+    const placed = placeAquaticFamily(TROUT, cx, cz, 2);
+    if (placed < 2) continue; // a partial family is a lone single-sex trout that can never breed — don't burn the basin's eligibility
+    placedTrout.push({ x: cx, z: cz });
+    troutComps.add(comp);
+    troutPlaced += placed;
+  }
+
+  // --- Pass Q: duck FAMILIES on the marsh band (~12 in 4 family clusters) -------------------------------
+  // Ducks live where water meets land — the marsh biome is exactly that band (same rule as the frog pass).
+  for (let f = 0; f < DUCK_FAMILIES; f++) {
+    placeFamilyOnBiome(DUCK, DUCK_FAMILY_SIZE, (biome) => biome === BIOME_MARSH);
   }
 
   return { total, perSpecies };

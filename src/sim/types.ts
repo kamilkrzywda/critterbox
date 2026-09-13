@@ -70,6 +70,12 @@ export interface PlantSpecies extends Species {
    *  Defaults to SEED_EXCLUDE_RADIUS; large-canopy species (trees) override with a bigger value so their
    *  self-seeding spread stays bounded. */
   seedExcludeRadius?: number;
+  /** Aquatic placement + spread rules for water plants (undefined = land plant, the default behavior).
+   *  `seat` is where the agent sits each tick: 'surface' floats at the fixed water level (algae mats, lily
+   *  pads), 'bottom' anchors on the terrain floor (pondweed). The depth window [minDepth, maxDepth] meters
+   *  below the surface bounds seeding AND self-seeding spread — a plant never establishes in shallower or
+   *  deeper water than its light/anchor needs allow. */
+  aquatic?: { seat: 'surface' | 'bottom'; minDepth: number; maxDepth?: number };
 }
 
 // --- Plant stage machine states (RimWorld model) -------------------------------------------

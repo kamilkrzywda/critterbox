@@ -21,7 +21,7 @@ import { registerSpecies } from '../../registry';
 import type { AnimalSpecies } from './base';
 import { animalEnergyMax, attemptMate, canAttemptBreed, pickWanderTarget } from './base';
 import { STAGE_FRUITING, STAGE_GROWING, STAGE_REGROWTH, ANIMAL_STATE_MATE, ANIMAL_STATE_SEEK_FOOD } from '../../types';
-import type { Agent } from '../../types';
+import type { Agent, PlantSpecies } from '../../types';
 import type { Sim } from '../../sim';
 import { pollinatePlant } from '../../sim';
 
@@ -80,6 +80,7 @@ function insectDecide(sim: Sim, a: Agent, sp: AnimalSpecies): void {
       if (!p || p.energy <= 0) continue;
       const ps = sim.speciesOf(p.id); // dense cache — per-candidate lookups (600 insects × decision ticks)
       if (!ps || ps.kind !== 'plant') continue;
+      if ((ps as PlantSpecies).aquatic) continue; // aquatic plants are out of an insect's reach — no swimming for nectar (v0.12)
       if (p.state !== STAGE_GROWING && p.state !== STAGE_FRUITING && p.state !== STAGE_REGROWTH) continue; // nectar plants
       const dx = p.pos.x - a.pos.x;
       const dz = p.pos.z - a.pos.z;

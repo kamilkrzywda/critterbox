@@ -325,6 +325,13 @@ function updatePlant(sim: Sim, a: Agent, light: number, weatherFertility: number
   if (!sp || sp.kind !== 'plant') return true; // defensive — step() routes animals to updateAnimal
   const ps = sp as PlantSpecies;
 
+  // Aquatic plants sit where their species dictates (surface floaters / bottom-anchored) — the terrain is
+  // static, so re-seating each tick is just a height lookup + assignment.
+  if (ps.aquatic) {
+    const w = sim.world;
+    a.pos.y = ps.aquatic.seat === 'surface' ? w.waterLevel : w.heightAt(a.pos.x, a.pos.z);
+  }
+
   a.age += 1;
   if (a.age > ps.lifespan) return false; // old age
   if (a.energy <= 0) return false; // starvation — checked BEFORE regrowth: grazed to nothing is dead
@@ -390,6 +397,7 @@ export function grazePlant(agent: Agent, amount: number): number {
 export function pollinatePlant(sim: Sim, agent: Agent): boolean {
   const sp = getSpecies(agent.species);
   if (!sp || sp.kind !== 'plant') return false;
+  if ((sp as PlantSpecies).aquatic) return false; // insects can't reach aquatic plants (see insectDecide) — defensive
   if (agent.state !== STAGE_GROWING && agent.state !== STAGE_FRUITING) return false; // only flowering/fruiting plants
   if (!agent.data) agent.data = {};
   const last = agent.data.lastPollinateStep;

@@ -142,8 +142,26 @@ export interface AnimalSpecies extends Species {
   popCap: number;
   /** Plant species ids this animal eats. */
   foodSpecies: readonly string[];
+  /** Fallback plant species — considered ONLY when nothing from `foodSpecies` is visible within the search
+   *  radius ("only eaten if nothing else is seen"): floating flowers a carp ignores while algae grows in front
+   *  of it, shore reed a carp abandons once in-water plants exist. seekNearestFood returns the nearest primary
+   *  when any is in range and only falls through to this list otherwise. */
+  fallbackFoodSpecies?: readonly string[];
   /** Animal species ids this animal preys on (Phase 4 Part B: mice eat insects); prey are killed when fed upon. */
   preySpecies?: readonly string[];
+  /** Optional reachability filter for ANIMAL prey candidates in seekNearestFood — a bank insect is unreachable
+   *  from inside the river volume, a roach behind a land barrier sits in another swim-volume component. Prey
+   *  failing the check are skipped, not chased: chasing them parks the predator against its zone/volume clamp
+   *  until starvation (the Phase 6 pike-frog lesson). `self` is passed so filters can compare positions
+   *  (component checks); implementations that don't need it simply omit the parameter. Unset = all listed prey
+   *  reachable. */
+  preyReachable?: (sim: Sim, self: Agent, prey: Agent) => boolean;
+  /** Optional reachability filter for PLANT candidates in seekNearestFood — fish use it to skip plants sitting
+   *  in another connected swim-volume component (behind a land barrier): chasing them parks the fish against
+   *  its volume clamp until starvation while the unreachable meal sits on the other side of the bank (v0.12
+   *  roach forensics — whole families starved at dead-end channel ends steering at algae across a meander).
+   *  Plants failing the check are skipped, not chased. Unset = all listed plants reachable (land animals). */
+  foodReachable?: (sim: Sim, self: Agent, plant: Agent) => boolean;
   /** Optional WANDER-target validation against the biome/height field (frogs/storks stay in marsh/water-edge).
    *  Prey pursuit is exempt — a frog may still chase an insect that strays upland. */
   validTarget?: (sim: Sim, x: number, z: number) => boolean;
@@ -501,37 +519,47 @@ export const PLANT_MIN_EDIBLE_FRACTION = 0.6;
 export const FORAGE_SEARCH_MULT = 6;
 
 /**
- * Nearest edible agent (plant in foodSpecies or animal in preySpecies) within `radius` (default: the
- * species' senseRadius), via the spatial grid — null when nothing is in range. Exported so custom decides
- * (scavengers, insects) reuse it.
+ * Nearest edible agent within `radius` (default: the species' senseRadius), via the spatial grid — null when
+ * nothing is in range. Exported so custom decides (scavengers, insects) reuse it. Plants are two-tiered: a
+ * nearest PRIMARY (foodSpecies) wins whenever one is visible; only with NO primary in range does the search
+ * fall through to fallbackFoodSpecies ("only eaten if nothing else is seen"). Animal prey must be listed AND
+ * pass the optional preyReachable filter. One grid pass tracks both tiers at once.
  */
 export function seekNearestFood(sim: Sim, a: Agent, sp: AnimalSpecies, radius?: number): Agent | null {
-  let best: Agent | null = null;
-  let bestD2 = Infinity;
+  let bestPrimary: Agent | null = null;
+  let bestPrimaryD2 = Infinity;
+  let bestFallback: Agent | null = null;
+  let bestFallbackD2 = Infinity;
   for (const id of sim.grid.query(a.pos.x, a.pos.z, radius ?? sp.senseRadius)) {
     const p = sim.agentById(id);
     if (!p || p.id === a.id || p.energy <= 0) continue; // self is never food
     const ps = sim.speciesOf(p.id); // dense cache — per-candidate lookups on the hottest animal path (Phase 7 perf: seasonal foraging made this loop ~2× busier)
     if (!ps) continue;
-    let edible: boolean;
+    let tier: 'primary' | 'fallback' | null = null;
     if (ps.kind === 'plant') {
       const psp = ps as PlantSpecies;
       // Unestablished shoots are inedible — see PLANT_MIN_EDIBLE_FRACTION.
       if (p.state !== STAGE_FRUITING && p.energy < PLANT_MIN_EDIBLE_FRACTION * psp.maxEnergy) continue;
-      edible = sp.foodSpecies.includes(p.species);
+      // Reachability: a plant in another swim-volume component is behind a land barrier for fish (see foodReachable).
+      if (sp.foodReachable && !sp.foodReachable(sim, a, p)) continue;
+      if (sp.foodSpecies.includes(p.species)) tier = 'primary';
+      else if (sp.fallbackFoodSpecies?.includes(p.species)) tier = 'fallback'; // last resort — only wins when no primary is visible
     } else {
-      edible = sp.preySpecies?.includes(p.species) ?? false; // prey animal (mice eat insects, foxes hunt…)
+      // Prey animal — listed AND reachable (e.g. a bank insect is unreachable from inside the river volume; see preyReachable).
+      if (sp.preySpecies?.includes(p.species) && (!sp.preyReachable || sp.preyReachable(sim, a, p))) tier = 'primary';
     }
-    if (!edible) continue;
+    if (!tier) continue;
     const dx = p.pos.x - a.pos.x;
     const dz = p.pos.z - a.pos.z;
     const dist2 = dx * dx + dz * dz;
-    if (dist2 < bestD2) {
-      bestD2 = dist2;
-      best = p;
+    if (tier === 'primary') {
+      if (dist2 < bestPrimaryD2) { bestPrimaryD2 = dist2; bestPrimary = p; }
+    } else if (dist2 < bestFallbackD2) {
+      bestFallbackD2 = dist2;
+      bestFallback = p;
     }
   }
-  return best;
+  return bestPrimary ?? bestFallback; // a visible primary always beats the fallback tier
 }
 
 /**
@@ -575,11 +603,20 @@ export function dropSeedlingNearby(sim: Sim, plant: Agent): boolean {
   const dist = (0.4 + 0.6 * agentRand(plant.id, sim.stepCount, 0x5ee2)) * SEED_DROP_RANGE;
   const nx = plant.pos.x + Math.cos(ang) * dist;
   const nz = plant.pos.z + Math.sin(ang) * dist;
-  if (sim.world.heightAt(nx, nz) < sim.world.waterLevel) return false; // no seeds underwater
-  // Biome fidelity: a seedling only establishes in the parent's biome — habitat suitability keeps species
-  // on their home ground. Without it, iterative ≤3 m hops compound over long runs and marsh cranberries
-  // crept ~40 m into dry meadow where nothing grazes them, growing unbounded (Phase 5 stability tuning).
-  if (sim.world.biomeAt(nx, nz) !== sim.world.biomeAt(plant.pos.x, plant.pos.z)) return false;
+  const aqua = (getSpecies(plant.species) as PlantSpecies | undefined)?.aquatic;
+  if (aqua) {
+    // Aquatic spread: the seedling must land in water whose depth is within the species' window — algae mats
+    // creep across any open surface, pondweed roots only where there is a real bottom. No biome check: the
+    // whole connected water body is one habitat (the "flowing on water and spreading around" rule).
+    const depth = sim.world.waterLevel - sim.world.heightAt(nx, nz);
+    if (depth < aqua.minDepth || (aqua.maxDepth !== undefined && depth > aqua.maxDepth)) return false;
+  } else {
+    if (sim.world.heightAt(nx, nz) < sim.world.waterLevel) return false; // no seeds underwater
+    // Biome fidelity: a seedling only establishes in the parent's biome — habitat suitability keeps species
+    // on their home ground. Without it, iterative ≤3 m hops compound over long runs and marsh cranberries
+    // crept ~40 m into dry meadow where nothing grazes them, growing unbounded (Phase 5 stability tuning).
+    if (sim.world.biomeAt(nx, nz) !== sim.world.biomeAt(plant.pos.x, plant.pos.z)) return false;
+  }
   if (!canDropSeed(sim, nx, nz, plant.species, plant.id)) return false; // carrying capacity (parent excluded)
   sim.addAgent(plant.species, nx, nz); // seedling stage at the initial energy fraction
   return true;

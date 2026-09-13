@@ -188,6 +188,20 @@ export function riverComponentAt(sim: Sim, x: number, z: number): number {
 const STEER_ANGLE_OFFSETS = [0, -0.6, 0.6, -1.2, 1.2, -1.8, 1.8];
 
 /**
+ * `foodReachable` hook for river fish (v0.12): an IN-WATER plant is only reachable when it sits in the SAME
+ * connected swim-volume component as the fish — behind a land barrier it is unreachable no matter how close
+ * the straight line looks, and steering at it parks the fish against the volume clamp until starvation while
+ * the meal sits on the other side of the bank (20k-step roach forensics: whole families starved at dead-end
+ * channel ends). Shore/shallow plants (component -1) are left to the existing eatRange + volume-clamp handling —
+ * a carp grazing waterline reed from adjacent deep water is legitimate Phase 6 behaviour.
+ */
+export function fishFoodReachable(sim: Sim, self: Agent, plant: Agent): boolean {
+  const pc = riverComponentAt(sim, plant.pos.x, plant.pos.z);
+  if (pc === -1) return true; // shore/shallow — reachable from adjacent water within eatRange
+  return pc === riverComponentAt(sim, self.pos.x, self.pos.z);
+}
+
+/**
  * A volume-validated steer point toward (fx,fz) for directional foraging: distance min(dist/2, wanderRadius),
  * the direct direction first and then angular offsets until a candidate sits inside the river volume
  * (validTarget). Returns null when no candidate is in the volume — the caller falls back to a validated

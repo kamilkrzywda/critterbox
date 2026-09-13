@@ -1,12 +1,12 @@
 /**
- * Pike (PLAN roster, Phase 6). The river predator: lives only in the river volume (aquatic.ts) and hunts
- * CARP — its main diet — with hunger-gated pursuit + saturating intake (the fox pattern from base.ts),
- * plus the PLAN frog–pike interaction: it strikes FROGS at the water's edge. A pike never chases a frog
- * upland — the volume clamp would park it at the shore — so a frog is only targeted when its cell sits
- * within PIKE_FROG_STRIKE_SHALLOW above the water line (shallow water / shoreline); from there the strike
- * range (eatRange) covers the last meters out of the water. Behaviour comes from ./base.ts parameterized
- * by this table + per-agent traits; the two aquatic hooks (validTarget / settlePosition) keep it in the
- * water, and a clamped-against target is skipped for AQUATIC_BAD_TARGET_COOLDOWN ticks as a safety net.
+ * Pike (PLAN roster, Phase 6; v0.12 diet rework). The river predator: lives only in the river volume
+ * (aquatic.ts) and hunts CARP — its main diet — with hunger-gated pursuit + saturating intake (the fox
+ * pattern from base.ts), plus the PLAN frog–pike interaction: it strikes FROGS at the water's edge. A pike
+ * never chases a frog upland — the volume clamp would park it at the shore — so a frog is only targeted when
+ * its cell sits within PIKE_FROG_STRIKE_SHALLOW above the water line (shallow water / shoreline); from there
+ * the strike range (eatRange) covers the last meters out of the water. Behaviour comes from ./base.ts
+ * parameterized by this table + per-agent traits; the two aquatic hooks (validTarget / settlePosition) keep it
+ * in the water, and a clamped-against target is skipped for AQUATIC_BAD_TARGET_COOLDOWN ticks as a safety net.
  *
  * Traits (name / min / max / σ) — bounds clamp mutation; σ is the Gaussian sd applied at birth:
  *   speed       0.9 – 1.4    (σ 0.10)  move-speed multiplier — faster than EVERY carp (min pike 0.135 > max carp 0.104 m/tick)
@@ -62,7 +62,11 @@ export const PIKE: AnimalSpecies = {
   // predator–prey cycle's amplitude exceeds the prey buffer and the basin crashes (Phase 6 stability forensics:
   // 12-cap runs went extinct by t≈9k; eight + the 0.5 hunger gate keeps kills ≈ births with margin). Must stay
   // above the seeded population of six or no replacement breeding is ever allowed.
-  foodSpecies: [], // carnivore — carp + waterline frogs only
+  foodSpecies: [], // carnivore — river fish + waterline frogs only
+  // v0.12: carp stay the main diet, with waterline frog strikes (the PLAN interaction). Roach and trout are
+  // deliberately NOT on this menu: pike's nearest-prey targeting strips both faster than they can breed back —
+  // roach crashed to zero when pike shared the trout's niche (20k-step forensics). The river runs two parallel
+  // predator–prey pairs instead: pike→carp and trout→roach, each self-sustaining.
   preySpecies: ['carp', 'frog'],
   bodySize: [0.22, 0.14, 0.9], // world-space meters at mid size trait → rendered ~0.68–1.13 m long (a real pike)
   validTarget: aquaticValidTarget, // river-volume constraint (wander targets only — see module header)
@@ -128,12 +132,12 @@ function pikeDecide(sim: Sim, a: Agent, sp: AnimalSpecies): void {
 }
 
 /**
- * Nearest REACHABLE prey within `radius`, via the spatial grid: a carp anywhere (it is always inside the
- * river volume, so reachable along the channel), or a frog only when strikable — at the waterline (within
- * PIKE_FROG_STRIKE_SHALLOW above it) AND already within eatRange+1 of the pike. The ambush rule: a pike never
- * chases a frog upland; chasing one parks it against the volume clamp and burns energy until starvation, so
- * such frogs are skipped entirely — the search continues to the next candidate instead (a carp 60 m away is
- * still found even when an uncatchable frog sits 8 m off). Bad-target cooldowns apply.
+ * Nearest REACHABLE prey within `radius`, via the spatial grid: a carp anywhere in the SAME connected
+ * swim-volume component — a fish behind a land barrier is unreachable no matter how close it looks, and steering at it loops against the volume clamp until starvation while
+ * reachable prey swim on this side of the barrier (Phase 6 stability forensics). A frog is only strikable
+ * at the waterline (within PIKE_FROG_STRIKE_SHALLOW above it) AND already within eatRange+1 — a pike never
+ * chases one upland; chasing parks it against the volume clamp and burns energy until starvation, so such
+ * frogs are skipped entirely and the search continues to the next candidate. Bad-target cooldowns apply.
  */
 function seekReachablePrey(sim: Sim, a: Agent, sp: AnimalSpecies, radius: number): Agent | null {
   const myComp = riverComponentAt(sim, a.pos.x, a.pos.z); // the pike is always in the volume → ≥ 0
@@ -142,22 +146,22 @@ function seekReachablePrey(sim: Sim, a: Agent, sp: AnimalSpecies, radius: number
   for (const id of sim.grid.query(a.pos.x, a.pos.z, radius)) {
     const p = sim.agentById(id);
     if (!p || p.id === a.id || p.energy <= 0) continue; // self is never food
-    if (p.species !== 'carp' && p.species !== 'frog') continue;
+    if (!sp.preySpecies?.includes(p.species)) continue;
     if (isBadTarget(a, sim, p.id)) continue; // recently clamped against — skip for the cooldown window
     const dx = p.pos.x - a.pos.x;
     const dz = p.pos.z - a.pos.z;
     const dist2 = dx * dx + dz * dz;
     if (dist2 > radius * radius) continue; // grid query is a cell superset — exact disc test
-    if (p.species === 'carp') {
-      // A carp in another connected swim-volume component sits behind a land barrier — unreachable no matter
-      // how close it looks. Steering at it loops against the volume clamp until starvation while reachable
-      // carp swim on this side of the barrier (Phase 6 stability forensics, seed 1337).
-      if (riverComponentAt(sim, p.pos.x, p.pos.z) !== myComp) continue;
-    } else {
+    if (p.species === 'frog') {
       const h = sim.world.heightAt(p.pos.x, p.pos.z);
       if (h >= sim.world.waterLevel + PIKE_FROG_STRIKE_SHALLOW) continue;
       const reach2 = (sp.eatRange + 1) * (sp.eatRange + 1); // +1 m margin for the frog moving before the strike lands
       if (dist2 > reach2) continue;
+    } else {
+      // A river fish in another connected swim-volume component sits behind a land barrier — unreachable no
+      // matter how close it looks. Steering at it loops against the volume clamp until starvation while
+      // reachable prey swim on this side of the barrier (Phase 6 stability forensics, seed 1337).
+      if (riverComponentAt(sim, p.pos.x, p.pos.z) !== myComp) continue;
     }
     if (dist2 < bestD2) {
       bestD2 = dist2;
