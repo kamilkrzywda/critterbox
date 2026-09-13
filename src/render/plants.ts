@@ -121,6 +121,29 @@ export class PlantRenderer {
     return [...this.bySpecies.keys()];
   }
 
+  /** Raycast against this renderer's instanced meshes (every species, every sub-mesh — trees' trunk +
+   *  canopy share the slot mapping); returns the NEAREST hit as {agent, distance} or null. Used by the
+   *  entity inspector click-pick (Phase 8) — a click is rare, so O(instances) per mesh is fine. The
+   *  instanced bounding sphere is recomputed first: three.js caches it after the first raycast and never
+   *  refreshes it, but instances move every tick (animals) / spawn over time (plants). */
+  pickAgent(raycaster: THREE.Raycaster): { agent: Agent; distance: number } | null {
+    let best: { agent: Agent; distance: number } | null = null;
+    for (const sr of this.bySpecies.values()) {
+      if (sr.agents.length === 0) continue;
+      for (const m of sr.meshes) {
+        m.computeBoundingSphere(); // keep the culling sphere fresh — see above
+        const hits = raycaster.intersectObject(m, false);
+        for (const h of hits) {
+          if (h.instanceId === undefined || h.distance >= (best ? best.distance : Infinity)) continue;
+          const a = sr.agents[h.instanceId]; // slot → live agent (see sync's slot mapping)
+          if (!a) continue;
+          best = { agent: a, distance: h.distance };
+        }
+      }
+    }
+    return best;
+  }
+
   /** Sync the rendered instances to the sim's live PLANT agents (flat list). Call once per frame. */
   sync(agents: Agent[]): void {
     for (const arr of this.work.values()) arr.length = 0;

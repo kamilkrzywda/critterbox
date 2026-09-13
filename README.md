@@ -4,17 +4,20 @@ Browser-based 3D animal-ecosystem simulation: a procedurally generated heightmap
 
 `PLAN.md` at the repo root is the single source of truth for design decisions and roadmap; `CHANGELOG.md` tracks released versions (Keep-a-Changelog format).
 
-## Current state (v0.6.0)
+## Current state (v0.9.0)
 
-Roadmap phases 0–5 are implemented:
+All roadmap phases 0–8 are implemented:
 
 - **Worldgen** — seeded fBm heightmap, biomes (meadow/forest/marsh/grassland), fixed water level carving rivers/lakes; size-at-gen dialog (100–800 m, default 300) with seed input and "New World" rebuild
 - **Camera** — free-flight: WASD move, mouse-drag look (no pointer lock), arrow-key rotation, Shift ×4, wheel dolly; Space pause
 - **Agent core + plants** — energy model, spatial hash grid, plant stage machine (seedling → growing → fruiting → regrowth → senescence), instanced rendering, population panel with live counts per species
 - **Herbivores** — mouse, hare, hamster, deer + insect pollinators; grazing with plant regrowth, breeding gates, sexes, trait inheritance with mutation
 - **Predators & scavengers** — fox, stork, owl, crow + frog; hunger-gated hunting with saturating intake; corpses decay and are scavenged (fox/crow)
+- **Aquatic** — carp (river omnivore) + pike (river predator) in the river volume, incl. the frog–pike waterline interaction
+- **Day/night + weather** — "settings animator" layer: light gates photosynthesis, temperature drives metabolism + a breeding cold-snap gate, rain boosts plant fertility; seeded Markov weather chain; scene lighting follows the clock
+- **Polish** — sim-speed slider (0–8×, persisted to localStorage; 0 = pause, synced with Space + PAUSED overlay), IndexedDB autosave every 30 s (activity-gated, gzip in a dedicated worker, restore-on-load before first render, "New World" overwrites the save), entity inspector (click any plant/animal → side panel with all live parameters, ~10 Hz; highlight ring on the selected agent; Esc / empty-click deselects)
 
-Not yet implemented: aquatic species (carp/pike), day/night + weather (temperature hook exists but is fixed at 1.0), IndexedDB autosave, entity inspector, sim-speed slider UI (accumulator has the Phase 8 speed hook).
+Not yet implemented (stretch): wolf (top predator), beaver (terrain modifier!), moose; evolution v2 — NEAT-style brains behind a pluggable "brain" interface.
 
 ## Tech stack
 
@@ -30,18 +33,20 @@ src/
   main.ts            — boot, fixed-timestep loop (accumulator + max-steps clamp), window.__critterbox debug surface
   worldgen/          — noise.ts (seeded value-noise fBm), worldgen.ts (heightmap → biomes)
   sim/               — PURE TS: no three.js imports
-    agents/          — index.ts barrel; plants/ (grass, clover, cranberry, reed, tree); animals/ (base + mouse, hare, hamster, deer, insect, frog, fox, stork, owl, crow)
-    sim.ts           — Sim core: step loop, breeding, predation/grazing API
+    agents/          — index.ts barrel; plants/ (grass, clover, cranberry, reed, tree); animals/ (base + mouse, hare, hamster, deer, insect, frog, fox, stork, owl, crow, carp, pike)
+    sim.ts           — Sim core: step loop, breeding, predation/grazing API, save/load state restore
     seedLife.ts      — deterministic per-biome world seeding
     spatial.ts       — uniform spatial hash grid (flat counting-sort)
     energy.ts        — shared energy model
     corpses.ts       — corpse layer: decay + scavenging
+    environment.ts   — day/night + weather animator curves (pure in seed+step)
     registry.ts, rng.ts, types.ts
   render/            — Three.js: terrain.ts (heightmap mesh + water), camera.ts (free-flight), plants.ts / animals.ts (InstancedMesh per species)
-  ui/                — panel.ts (world-gen dialog), population.ts (population panel overlay)
+  ui/                — panel.ts (world-gen dialog), population.ts (population panel), envPanel.ts (day/weather indicator), inspector.ts (entity inspector side panel)
+  save/              — Phase 8: serialize.ts (pure binary payload), storage.ts (IndexedDB, single key), saveWorker.ts (fflate gzip level 6 in a module worker), save.ts (autosave orchestration), restore.ts (restore-on-load)
 scripts/sim-check.mjs   — headless deterministic suite runner (tsc-CJS compile → Node)
-scripts/checks/*.mjs    — check sections: worldgen, terrain, spatial, plants, animals, predators, sizes, stability (20k-step run)
-e2e/                 — Playwright specs: smoke, worldgen, camera, plants, animals
+scripts/checks/*.mjs    — check sections: worldgen, terrain, spatial, plants, animals, predators, aquatic, environment, sizes, stability (20k-step run), save (serialize round-trip)
+e2e/                 — Playwright specs: smoke, worldgen, camera, plants, animals, environment, speed, inspector, save
 playwright.config.ts     — webServer auto-runs build + preview on :4173
 ```
 

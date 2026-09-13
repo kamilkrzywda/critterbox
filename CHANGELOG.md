@@ -2,6 +2,21 @@
 
 All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 
+## [0.9.0] - 2026-09-13
+
+### Added
+- IndexedDB autosave (Phase 8, the final roadmap phase): the whole sim state is {seed, size, step, agents[], corpses[]} — terrain re-derives from seed+size and the day/night + weather environment is a pure function of seed+step, so nothing else needs storing. Payload = binary header (magic "CRBX" + version u32 + seed/size/step) + JSON tail (`src/save/serialize.ts`, pure TS — runs headlessly); fflate gzip level 6 in a dedicated module worker (`saveWorker.ts`), single IndexedDB key (`storage.ts`). Autosave every 30 s, activity-gated (skipped while paused/settled), plus forced flushes on visibilitychange(hidden) and pagehide(capture); `navigator.storage.persist()` once at boot. Restore-on-load runs BEFORE the first render — a saved world replaces the fresh default one; any failure (no blob, corrupt gzip, version mismatch) falls back to a fresh deterministic world, never crashes. "New World" (dialog button or debug `regenerate`) regenerates AND overwrites the save
+- Boot is now async (`main.ts`): restore-on-load settles before the canvas is appended and the render loop starts — so #scene being visible doubles as the "world ready" gate for e2e, and no frame ever renders a world that isn't final. `Sim.loadState(agents, corpses, step)` (pure sim core) restores saved ids verbatim, rebuilds the dense by-id tables + population counts, advances nextId past them and invalidates the environment cache — the deterministic per-agent hash-randomness sequence continues exactly where it left off
+- Sim-speed slider 0–8× in the world panel: wired into the fixed-timestep accumulator (the Phase 3 speed hook), persisted to localStorage (`critterbox.speed`, Sandfall convention). 0 = pause, kept in sync with the Space toggle + PAUSED overlay (either one freezes the sim and shows the overlay)
+- Entity inspector: click any plant/animal → raycast against both instanced renderers (nearest hit across species/sub-meshes wins; a pointerup within 5 px of the pointerdown is a pick, longer drags stay camera movement) → side panel with ALL live parameters — species, sex (animals), age, energy, every trait value, state, position — refreshed ~10 Hz (`src/ui/inspector.ts`). The selected agent gets a highlight ring that follows it each frame; Esc or an empty click deselects; the selection clears itself when the agent dies
+- Debug surface additions: `saveNow()`, `hasSave()`, `loadStateInfo()` (stored seed/size/step/agentCount), `speed` / `setSpeed(x)`, `selectAgent(id)` / `selected` — e2e drives all of it deterministically
+- Headless save checks (`scripts/checks/save.mjs`): serialize → deserialize round-trip on a real sim state after 500 steps (header fields verbatim, agent + corpse arrays deep-equal) and the real acceptance — a second Sim restored via `loadState` steps in lockstep with the original for another 300 ticks; corrupt-payload rejection (bad magic / version mismatch / truncation / garbage tail → null, never throws)
+- e2e completion: speed spec (0× freezes the tick over ~1 s wall time; 4× runs ≈4× the 1× baseline rate with jitter tolerance; slider element + localStorage persistence), inspector spec (`selectAgent` opens the panel showing species/sex/energy fields for a plant and an animal, Esc deselects), save spec (fresh context has no save → `saveNow()` stores seed+step → reload restores that exact world before first render with populations present → New World with a new seed overwrites the store → reload resumes the NEW world)
+
+### Changed
+- README "Current state" refreshed to v0.9.0: all roadmap phases 0–8 implemented; feature bullets gained aquatic, day/night + weather and the polish trio (speed slider / autosave / inspector); the stale "not yet implemented" list is now stretch items only (wolf/beaver/moose, NEAT-style evolution behind a pluggable brain interface)
+- `e2e/worldgen.spec.ts` "New World" test now waits for #scene visibility before reading the debug surface — with async boot the canvas is appended at the end of restore-on-load, so that wait IS the readiness gate (the other specs already had it)
+
 ## [0.8.0] - 2026-09-13
 
 ### Added

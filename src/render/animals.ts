@@ -60,6 +60,26 @@ export class AnimalRenderer {
 
   get object(): THREE.Group { return this.group; }
 
+  /** Raycast against this renderer's instanced meshes (one per species); returns the NEAREST hit as
+   *  {agent, distance} or null. Used by the entity inspector click-pick (Phase 8). The instanced bounding
+   *  sphere is recomputed first: three.js caches it after the first raycast and never refreshes it, but
+   *  animals move every tick — a stale sphere would make clicks on relocated animals miss. */
+  pickAgent(raycaster: THREE.Raycaster): { agent: Agent; distance: number } | null {
+    let best: { agent: Agent; distance: number } | null = null;
+    for (const sr of this.bySpecies.values()) {
+      if (sr.agents.length === 0) continue;
+      sr.mesh.computeBoundingSphere(); // keep the culling sphere fresh — see above
+      const hits = raycaster.intersectObject(sr.mesh, false);
+      for (const h of hits) {
+        if (h.instanceId === undefined || h.distance >= (best ? best.distance : Infinity)) continue;
+        const a = sr.agents[h.instanceId]; // slot → live agent (see sync's slot mapping)
+        if (!a) continue;
+        best = { agent: a, distance: h.distance };
+      }
+    }
+    return best;
+  }
+
   /** Sync the rendered instances to the sim's live animal agents (flat list). Call once per frame. */
   sync(agents: Agent[]): void {
     for (const arr of this.work.values()) arr.length = 0;

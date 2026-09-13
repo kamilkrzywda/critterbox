@@ -19,8 +19,10 @@ import { PlantRenderer } from './render/plants';
 import { AnimalRenderer } from './render/animals';
 import { initPopulationPanel, type PopRow } from './ui/population';
 import { initEnvPanel } from './ui/envPanel';
+import { initInspectorPanel } from './ui/inspector';
 import { restoreWorld, type RestoreResult } from './save/restore';
 import { loadStateInfo, requestStoragePersistence, saveNow, startAutosave } from './save/save';
+import type { Agent } from './sim/types';
 
 const DEFAULT_SEED = 1337;
 const DEFAULT_SIZE = 300;
@@ -136,6 +138,7 @@ function buildWorld(seed: number, size: number): World {
   animalRenderer = new AnimalRenderer();
   scene.add(animalRenderer.object);
 
+  selectedId = null; // ids restart at 1 in the new world — a stale selection would highlight an unrelated agent
   frameWorld(world.size);
   refreshPanel?.(world.seed, world.size);
   return world;
@@ -183,41 +186,146 @@ if (envContainer) {
   initEnvPanel(envContainer, () => sim ? sim.environment : null);
 }
 
-// --- pause (Space) ---------------------------------------------------------------------------
+// --- pause (Space) + sim-speed slider (Phase 8) ----------------------------------------------
+// The sim is frozen when Space-paused OR the speed slider sits at 0× — both show the PAUSED overlay, so
+// the two controls stay in sync: dragging to 0 pauses visually, and Space still toggles its own flag.
 
 const pausedOverlay = document.getElementById('paused-overlay');
 let paused = false;
 
+/** The sim is frozen when Space-paused OR the speed slider sits at 0× (see above). */
+function frozen(): boolean { return paused || simSpeed === 0; }
+
+function syncPauseOverlay(): void {
+  if (pausedOverlay) pausedOverlay.style.display = frozen() ? 'block' : 'none';
+}
+
 function setPaused(p: boolean): void {
   paused = p;
-  if (pausedOverlay) pausedOverlay.style.display = p ? 'block' : 'none';
+  syncPauseOverlay();
 }
 
 window.addEventListener('keydown', (e) => {
+  if (e.code === 'Escape') { selectAgentById(null); return; } // Esc closes the inspector / deselects
   if (e.code !== 'Space' || e.repeat) return;
   if (isTypingTarget(document.activeElement)) return; // typing in the seed input is not a pause
   e.preventDefault();
   setPaused(!paused);
 });
 
-// --- fixed-timestep skeleton (Phase 3 fills stepSim with the agent simulation) --------------
+// --- sim-speed slider (Phase 8): 0–8×, persisted to localStorage (Sandfall convention) --------
+
+const SPEED_KEY = 'critterbox.speed';
+let simSpeed = 1;
+
+function loadPersistedSpeed(): number {
+  try {
+    const raw = localStorage.getItem(SPEED_KEY);
+    if (raw !== null) {
+      const v = Number(raw);
+      if (Number.isFinite(v)) return Math.max(0, Math.min(8, v));
+    }
+  } catch { /* storage unavailable — non-fatal */ }
+  return 1;
+}
+
+const speedSlider = document.getElementById('speed-slider') as HTMLInputElement | null;
+const speedLabel = document.getElementById('speed-label');
+
+function setSimSpeed(v: number): void {
+  simSpeed = Math.max(0, Math.min(8, v));
+  if (speedSlider) speedSlider.value = String(simSpeed);
+  if (speedLabel) speedLabel.textContent = `${simSpeed}×`;
+  try { localStorage.setItem(SPEED_KEY, String(simSpeed)); } catch { /* non-fatal */ }
+  syncPauseOverlay(); // slider at 0 freezes the sim → keep the PAUSED overlay in sync with it
+}
+
+if (speedSlider) {
+  speedSlider.addEventListener('input', () => setSimSpeed(Number(speedSlider.value)));
+}
+setSimSpeed(loadPersistedSpeed()); // restore the user's last choice before the first frame
+
+// --- fixed-timestep loop (Phase 3 fills stepSim with the agent simulation) ---------------------
 
 const SIM_STEP = 1 / 30; // sim tick rate: 30 steps/s at 1×
 const MAX_STEPS_PER_FRAME = 5; // clamp — never spiral after a long frame (Sandfall pattern)
 
-// PHASE 8 HOOK: the sim-speed slider multiplies time here (0× = pause, up to 8×). Kept as a plain
-// constant for now so the accumulator is already speed-ready; swap in the live slider value later.
-const SIM_SPEED = 1;
-
 let accumulator = 0;
 let lastTime = performance.now();
-let tick = 0;
 
 function stepSim(): void {
   if (!sim || !plantRenderer || !animalRenderer) return;
   sim.step(); // advance agents one fixed tick (plants: growth/stages/death; animals: behaviour/eating/breeding)
   plantRenderer.sync(sim.agents); // incremental instance updates from the change-feed
   animalRenderer.sync(sim.agents); // full matrix rewrite each frame (low counts — fine)
+}
+
+// --- entity inspector selection (Phase 8) ------------------------------------------------------
+// Click an agent → raycast against both instanced renderers, nearest hit wins; click empty space or Esc
+// deselects. The selected agent is highlighted by a small ring marker that follows it each frame, and its
+// live parameters show in the side panel (~10 Hz). Selection is just an id — when the agent dies (or the
+// world is rebuilt) the id stops resolving and everything clears itself.
+
+let selectedId: number | null = null;
+
+/** Select a live agent by id (null → deselect). Dead/unknown ids deselect instead of erroring. */
+function selectAgentById(id: number | null): void {
+  if (id !== null && !(sim?.agentById(id))) id = null; // dead/absent — or no world yet
+  selectedId = id;
+}
+
+const selectionMarker = new THREE.Mesh(
+  new THREE.TorusGeometry(2, 0.15, 8, 32),
+  new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 0.9 }), // unlit — reads as a marker
+);
+selectionMarker.rotation.x = -Math.PI / 2; // lay the ring flat on the ground plane
+selectionMarker.visible = false;
+scene.add(selectionMarker);
+
+/** Per-frame: park the highlight ring on the selected agent, or clear it when the selection dies. */
+function updateSelectionMarker(): void {
+  if (selectedId === null) {
+    selectionMarker.visible = false;
+    return;
+  }
+  const a = sim?.agentById(selectedId);
+  if (!a) {
+    selectedId = null; // the agent died (or the world was rebuilt) → deselect
+    selectionMarker.visible = false;
+    return;
+  }
+  selectionMarker.position.set(a.pos.x, a.pos.y + 0.15, a.pos.z);
+  selectionMarker.visible = true;
+}
+
+// Click-pick: a pointerup within 5 px of the pointerdown is a click (anything longer is a camera drag).
+const pickRaycaster = new THREE.Raycaster();
+const pickNdc = new THREE.Vector2();
+let downX = 0;
+let downY = 0;
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  downX = e.clientX;
+  downY = e.clientY;
+});
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!booted || !sim) return; // no world yet — nothing to pick
+  if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return; // a drag is camera movement, not a pick
+  const rect = renderer.domElement.getBoundingClientRect();
+  pickNdc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+  pickRaycaster.setFromCamera(pickNdc, camera);
+  const pa = plantRenderer?.pickAgent(pickRaycaster) ?? null;
+  const aa = animalRenderer?.pickAgent(pickRaycaster) ?? null;
+  let hit: { agent: Agent; distance: number } | null = null;
+  if (pa && (!aa || pa.distance < aa.distance)) hit = pa; // nearest across BOTH renderers wins
+  else if (aa) hit = aa;
+  selectAgentById(hit ? hit.agent.id : null); // empty click → deselect
+});
+
+// Inspector side panel — renders whatever is selected, ~10 Hz (see ui/inspector.ts).
+const inspContainer = document.getElementById('inspector-panel');
+if (inspContainer) {
+  initInspectorPanel(inspContainer, () => (selectedId !== null && sim ? sim.agentById(selectedId) ?? null : null));
 }
 
 // --- debug surface (assigned at the END of boot — its presence means "world ready") -----------
@@ -252,6 +360,14 @@ declare global {
       hasSave(): Promise<boolean>;
       /** Describe the stored save without restoring it (seed/size/step when a valid save exists). */
       loadStateInfo(): Promise<{ hasSave: boolean; seed?: number; size?: number; step?: number; agentCount?: number }>;
+      // Phase 8: sim speed + entity inspector surface
+      /** Current sim-speed multiplier (0–8×); the slider and this stay in sync. */
+      speed: number;
+      setSpeed(x: number): void;
+      /** Select an agent for the inspector by id (null/undefined → deselect). Dead ids deselect. */
+      selectAgent(id?: number | null): void;
+      /** Currently selected agent id, or null when nothing is selected. */
+      selected: number | null;
     };
   }
 }
@@ -298,8 +414,9 @@ async function boot(): Promise<void> {
     get agentCount() { return sim ? sim.agents.length : 0; },
     get populations() { return sim ? sim.populations() : {}; },
     plantRendererSpecies(): string[] { return plantRenderer ? plantRenderer.speciesIds() : []; },
-    // Phase 7: day/night + weather clock — live sample of the sim's current tick (frozen while paused).
-    get tick() { return tick; },
+    // Phase 7: day/night + weather clock — the sim's step counter itself, so it stays honest across a
+    // restore-on-load (sim.stepCount is restored verbatim from the save). Frozen while paused.
+    get tick() { return sim ? sim.stepCount : 0; },
     get timeOfDay() { return sim ? sim.environment.timeOfDay : 0; },
     get dayPhase() { return sim ? sim.environment.phase : 'dawn'; },
     get light() { return sim ? sim.environment.light : 0; },
@@ -309,6 +426,11 @@ async function boot(): Promise<void> {
     saveNow: () => (sim ? saveNow(sim) : Promise.resolve()),
     hasSave: async (): Promise<boolean> => (await loadStateInfo()).hasSave,
     loadStateInfo: () => loadStateInfo(),
+    // Phase 8: sim speed + entity inspector surface.
+    get speed() { return simSpeed; },
+    setSpeed(x: number): void { setSimSpeed(typeof x === 'number' && Number.isFinite(x) ? x : 1); },
+    selectAgent(id?: number | null): void { selectAgentById(id ?? null); },
+    get selected() { return selectedId; },
   };
 
   document.body.appendChild(renderer.domElement); // #scene visible ⇒ ready (e2e gate) — after the surface exists
@@ -329,19 +451,19 @@ function frame(now: number): void {
   if (dt > 0.25) dt = 0.25; // clamp after tab switches — no giant catch-up bursts
 
   flight.update(dt); // camera always flies, even while the sim is paused
-  if (!paused) {
-    accumulator += dt * SIM_SPEED; // PHASE 8 HOOK: speed multiplier applied here
+  if (!frozen()) {
+    accumulator += dt * simSpeed; // Phase 8: speed multiplier (0× = frozen, up to 8×) applied here
     let steps = 0;
     while (accumulator >= SIM_STEP && steps < MAX_STEPS_PER_FRAME) {
-      stepSim();
-      tick++;
+      stepSim(); // sim.stepCount advances inside — the debug-surface tick reads it directly
       accumulator -= SIM_STEP;
       steps++;
     }
     if (steps === MAX_STEPS_PER_FRAME) accumulator = 0; // drop backlog — stay smooth
   } else {
-    accumulator = 0; // don't bank time while paused — no burst on resume
+    accumulator = 0; // don't bank time while frozen — no burst on resume
   }
+  updateSelectionMarker(); // Phase 8: the highlight ring follows the selected agent (cheap per-frame)
   updateSkyAndLights(); // Phase 7: sky + sun follow the day/night light curve (cheap per-frame lerps)
   renderer.render(scene, camera);
 }
