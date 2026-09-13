@@ -1,7 +1,7 @@
 /**
- * drzewo — tree. The forest's structure: tall, very long-lived, provides browse/nest habitat (Phase 4+).
+ * Tree. The forest's structure: tall, very long-lived, provides browse/nest habitat (Phase 4+).
  * One species with three visual variants chosen by biome at seeding and stored on agent.variant:
- *   0 = brzoza (birch), 1 = dąb (oak), 2 = świerk (pine) — see render/plants.ts for their look.
+ *   0 = birch, 1 = oak, 2 = pine — see render/plants.ts for their look.
  * Self-registers into the species registry at load.
  */
 
@@ -28,7 +28,7 @@ export const TREE_MIN_TOTAL_HEIGHT = 8;
 export const TREE: PlantSpecies = {
   id: 'tree',
   kind: 'plant',
-  displayName: 'drzewo (tree)',
+  displayName: 'Tree',
   baseGrowthRate: 0.25, // slow — trees take their time to reach full canopy
   maxEnergy: 400,
   lifespan: 36000, // ~20 min — the longest-lived agents in Phase 3

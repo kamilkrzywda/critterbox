@@ -1,5 +1,5 @@
 /**
- * koniczyna — clover. A fertile-meadow forage with a modest yield; forms patches among the grass.
+ * Clover. A fertile-meadow forage with a modest yield; forms patches among the grass.
  * Self-registers into the species registry at load.
  */
 
@@ -10,7 +10,7 @@ import { BIOME_MEADOW } from '../../../worldgen/worldgen';
 export const CLOVER: PlantSpecies = {
   id: 'clover',
   kind: 'plant',
-  displayName: 'koniczyna (clover)',
+  displayName: 'Clover',
   baseGrowthRate: 0.4,
   maxEnergy: 90,
   lifespan: 7200, // ~4 min

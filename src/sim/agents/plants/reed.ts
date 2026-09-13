@@ -1,5 +1,5 @@
 /**
- * trzcina — reed. Tall wetland grass lining marshes and riverbanks; the classic waterline plant.
+ * Reed. Tall wetland grass lining marshes and riverbanks; the classic waterline plant.
  * Self-registers into the species registry at load.
  */
 
@@ -10,7 +10,7 @@ import { BIOME_MARSH } from '../../../worldgen/worldgen';
 export const REED: PlantSpecies = {
   id: 'reed',
   kind: 'plant',
-  displayName: 'trzcina (reed)',
+  displayName: 'Reed',
   baseGrowthRate: 0.45,
   maxEnergy: 110,
   lifespan: 6000, // ~4 min

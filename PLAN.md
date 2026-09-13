@@ -88,7 +88,7 @@ e2e/                 — Playwright specs (global install)
 
 ## Species roster (Polish fauna)
 
-Plants: trawa (grass), koniczyna (clover), borówka (cranberry bush), trzcina (reed), trees (brzoza/dąb/świerk — habitat + browse/nest sites)
+Plants: grass, clover, cranberry bush, reed, trees (birch/oak/pine — habitat + browse/nest sites)
 
 | Animal | Role | Eats | Eaten by | Phase |
 |---|---|---|---|---|

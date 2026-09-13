@@ -2,6 +2,11 @@
 
 All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 
+## [Unreleased]
+
+### Changed
+- Plant display names to English across UI, species modules and docs (Grass/Clover/Cranberry/Reed/Tree) — no Polish tokens remain anywhere in code or documentation
+
 ## [0.9.0] - 2026-09-13
 
 ### Added

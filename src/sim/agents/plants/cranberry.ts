@@ -1,5 +1,5 @@
 /**
- * borówka — cranberry bush. A low marsh shrub with a generous berry yield; the main fruiting plant of
+ * Cranberry. A low marsh shrub with a generous berry yield; the main fruiting plant of
  * wet ground near the waterline. Self-registers into the species registry at load.
  */
 
@@ -10,7 +10,7 @@ import { BIOME_MARSH } from '../../../worldgen/worldgen';
 export const CRANBERRY: PlantSpecies = {
   id: 'cranberry',
   kind: 'plant',
-  displayName: 'borówka (cranberry)',
+  displayName: 'Cranberry',
   baseGrowthRate: 0.35,
   maxEnergy: 120,
   lifespan: 9000, // ~5 min

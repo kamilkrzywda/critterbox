@@ -29,11 +29,11 @@ const DEFAULT_SIZE = 300;
 
 /** Species shown in the population panel: plants, then an animals section (Phase 4). */
 const PLANT_ROWS: PopRow[] = [
-  { id: 'grass', name: 'trawa' },
-  { id: 'clover', name: 'koniczyna' },
-  { id: 'cranberry', name: 'borówka' },
-  { id: 'reed', name: 'trzcina' },
-  { id: 'tree', name: 'drzewo' },
+  { id: 'grass', name: 'Grass' },
+  { id: 'clover', name: 'Clover' },
+  { id: 'cranberry', name: 'Cranberry' },
+  { id: 'reed', name: 'Reed' },
+  { id: 'tree', name: 'Tree' },
 ];
 const ANIMAL_ROWS: PopRow[] = [
   { id: 'mouse', name: 'Mouse' },

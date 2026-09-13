@@ -1,5 +1,5 @@
 /**
- * trawa — grass. The base herb: fast-growing, short-lived, grazed hard by every herbivore. Seeds on
+ * Grass. The base herb: fast-growing, short-lived, grazed hard by every herbivore. Seeds on
  * nearly every dry biome as the dominant ground cover. Self-registers into the species registry at load.
  */
 
@@ -10,7 +10,7 @@ import { BIOME_FOREST, BIOME_GRASSLAND, BIOME_MARSH, BIOME_MEADOW } from '../../
 export const GRASS: PlantSpecies = {
   id: 'grass',
   kind: 'plant',
-  displayName: 'trawa (grass)',
+  displayName: 'Grass',
   baseGrowthRate: 0.5, // ~150 ticks to fruiting at full fertility+light
   maxEnergy: 100,
   lifespan: 5400, // ~3 min of sim time before senescence
