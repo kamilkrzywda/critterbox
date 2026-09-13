@@ -60,6 +60,19 @@ function canopyGeo(): THREE.BufferGeometry {
   g.translate(0, base + h / 2, 0);
   return g;
 }
+/** Flat disc (algae mat / lily pad) sitting ON its seat point — the agent's pos.y is the water surface. */
+function flatDiscGeo(r: number): THREE.BufferGeometry {
+  const g = new THREE.CylinderGeometry(r, r, 0.06, 10);
+  g.translate(0, 0.03, 0); // base at y=0 → the disc floats just above the surface point
+  return g;
+}
+/** A water-lily bloom: a squashed sphere floating just above the pad plane. */
+function lilyFlowerGeo(): THREE.BufferGeometry {
+  const g = new THREE.SphereGeometry(0.12, 6, 5);
+  g.scale(1, 0.7, 1);
+  g.translate(0, 0.14, 0);
+  return g;
+}
 
 // --- palettes ---------------------------------------------------------------------------------
 
@@ -68,6 +81,10 @@ const PAL: Record<string, RGB> = {
   clover: [0.45, 0.7, 0.32],
   reed: [0.58, 0.64, 0.3],
   cranberry: [0.34, 0.48, 0.26],
+  algae: [0.32, 0.68, 0.24], // bright surface green — reads as a living mat on the water
+  pondweed: [0.18, 0.45, 0.2], // deep submerged green
+  lilyPad: [0.25, 0.5, 0.25],
+  lilyFlower: [0.85, 0.6, 0.7], // the bloom — pink, kept even when the pad withers
 };
 
 function trunkColor(v: number): RGB {
@@ -91,6 +108,19 @@ function buildVisual(spId: string): { geos: THREE.BufferGeometry[]; colorFns: ((
     case 'clover': return { geos: [coneGeo(0.35, 0.7, 6)], colorFns: [(_v, s) => wither(PAL.clover, 0.7)(s)] };
     case 'reed': return { geos: [coneGeo(0.12, 2.2, 4)], colorFns: [(_v, s) => wither(PAL.reed, 0.65)(s)] };
     case 'cranberry': return { geos: [bushGeo()], colorFns: [(_v, s) => wither(PAL.cranberry, 0.7)(s)] };
+    // v0.12: the aquatic plants — algae mats float on the surface, pondweed grows up from the bottom (two
+    // offset blades read as a tuft), water lily = pad + bloom (the flower keeps its colour when the pad withers).
+    case 'algae': return { geos: [flatDiscGeo(0.5)], colorFns: [(_v, s) => wither(PAL.algae, 0.6)(s)] };
+    case 'pondweed':
+      return {
+        geos: [coneGeo(0.15, 1.8, 4), coneGeo(0.12, 1.2, 4).translate(0.18, 0, 0.06)],
+        colorFns: [(_v, s) => wither(PAL.pondweed, 0.7)(s), (_v, s) => wither(PAL.pondweed, 0.7)(s)],
+      };
+    case 'waterlily':
+      return {
+        geos: [flatDiscGeo(0.6), lilyFlowerGeo()],
+        colorFns: [(_v, s) => wither(PAL.lilyPad, 0.6)(s), () => PAL.lilyFlower],
+      };
     case 'tree':
       return {
         geos: [trunkGeo(), canopyGeo()],

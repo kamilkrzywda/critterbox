@@ -36,6 +36,10 @@ const PLANT_ROWS: PopRow[] = [
   { id: 'cranberry', name: 'cranberry' },
   { id: 'reed', name: 'reed' },
   { id: 'tree', name: 'tree' },
+  // v0.12: the aquatic plants (in-water food base)
+  { id: 'algae', name: 'algae' },
+  { id: 'pondweed', name: 'pondweed' },
+  { id: 'waterlily', name: 'water lily' },
 ];
 const ANIMAL_ROWS: PopRow[] = [
   { id: 'mouse', name: 'mouse' },
@@ -52,6 +56,10 @@ const ANIMAL_ROWS: PopRow[] = [
   // Phase 6: the aquatic layer — carp + pike in the river volume
   { id: 'carp', name: 'carp' },
   { id: 'pike', name: 'pike' },
+  // v0.12: the widened river food chain
+  { id: 'roach', name: 'roach' },
+  { id: 'trout', name: 'trout' },
+  { id: 'duck', name: 'duck' },
 ];
 
 // --- renderer / scene -------------------------------------------------------------------

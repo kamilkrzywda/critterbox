@@ -32,6 +32,9 @@ const PALETTES: Record<string, RGB> = {
   crow: [0.1, 0.1, 0.12], // small black crow
   carp: [0.72, 0.58, 0.3], // golden-brown river carp (visible through the translucent water plane)
   pike: [0.42, 0.5, 0.28], // olive-green elongated pike
+  roach: [0.56, 0.6, 0.44], // small silvery-olive forage fish (visible through the translucent water plane)
+  trout: [0.72, 0.55, 0.45], // silver with reddish flanks (the flank tint is left to the jitter)
+  duck: [0.44, 0.46, 0.3], // mallard-like brown-green marsh band dweller
 };
 const FALLBACK: RGB = [0.5, 0.42, 0.3];
 /** Per-instance colour jitter amount (fraction of the base channel). */
