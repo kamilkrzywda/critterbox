@@ -88,7 +88,7 @@ e2e/                 — Playwright specs (global install)
 
 ## Species roster (Polish fauna)
 
-Plants: grass, clover, cranberry bush, reed, trees (birch/oak/pine — habitat + browse/nest sites)
+Plants: grass, clover, cranberry bush, reed, trees (birch/oak/pine — habitat + browse/nest sites), algae, pondweed, waterlily (aquatic)
 
 | Animal | Role | Eats | Eaten by | Phase |
 |---|---|---|---|---|
@@ -102,8 +102,11 @@ Plants: grass, clover, cranberry bush, reed, trees (birch/oak/pine — habitat +
 | stork | marsh hunter | frogs, mice | — | 5 |
 | owl | nocturnal hunter | mouse, hare | — | 5 |
 | crow | scavenger/generalist | corpses, seeds, eggs | — | 5 |
-| carp | river omnivore | plants, insects | pike | 6 |
-| pike | river predator | carp, edge-frogs | — | 6 |
+| carp | river omnivore | in-water plants (primary), shore plants + insects (fallback) | pike | 6 |
+| pike | river predator | carp, edge-frogs (roach/trout dropped v0.12 — two parallel pairs: pike→carp, trout→roach) | — | 6 |
+| roach | small fast in-water grazer | algae, pondweed | trout | 6 |
+| trout | mid river predator | roach, waterline insects | — | 6 |
+| duck | semi-aquatic grazer (shallow water + marsh band) | grass, clover, algae | — (predator-free) | 6 |
 
 Stretch: wolf (top predator), beaver (terrain modifier!), moose. Evolution v2: NEAT-style brains behind a pluggable "brain" interface.
 

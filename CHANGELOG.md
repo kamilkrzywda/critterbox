@@ -2,6 +2,19 @@
 
 All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 
+## [0.12.0] - 2026-09-13
+
+### Added
+- Six new species widen the river food chain: plants **algae** (in-water mats, carp/roach forage), **pondweed** (deep-water beds) and **waterlily** (floating flowers); animals **roach** (small fast in-water grazer — the river's "mouse"), **trout** (mid predator eating roach + waterline insects) and **duck** (semi-aquatic: swims shallow water AND walks the marsh band; eats grass/clover/algae, no predators). The population panel gained a row for each of the six
+- Reachability hooks in the animal base (`foodReachable` / `preyReachable`, passed the animal's own position): fish skip plants/prey sitting in another connected swim-volume component (behind a land barrier) instead of chasing them and starving against the volume clamp
+
+### Changed
+- Carp diet rework: in-water plants (algae/pondweed) are now its PRIMARY food — it forages across open water instead of parking at the bank; shore plants (reed/grass/clover/cranberry/waterlily) are fallback-only ("only eaten if nothing else is seen"). This fixes the Phase 6 pike problem structurally: prey and predator share patrol space
+- Pike diet narrowed to carp + waterline frog strikes (roach/trout removed — the river now runs two parallel pairs: pike→carp, trout→roach)
+
+### Fixed
+- Aquatic stability in long runs: unreachable-food starvation (via the reachability hooks above), algae mats dying from a single carp bite (maxEnergy raised so regrowth keeps pace with grazing), and trout/duck persistence — trout pairs now seed spaced across river basins, ducks made predator-free (a slow-breeding cap-14 species couldn't sustain fox predation)
+
 ## [0.11.0] - 2026-09-13
 
 ### Added
