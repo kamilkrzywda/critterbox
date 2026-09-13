@@ -2,6 +2,11 @@
 
 All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 
+## [Unreleased]
+
+### Changed
+- Population panel rows now render as a proper 3-column CSS grid (`minmax(0, 1fr) auto auto`) instead of free-flowing flex: name left (ellipsis on overflow), count and avg-energy right-aligned with `tabular-nums` so all digits have uniform width and every row's columns line up vertically. Rows also gained a subtle hover highlight (rgba(255,255,255,0.1) background, 80 ms transition) complementing the existing hover-to-highlight-species behavior — the mouseover/mouseout delegation on `.pop-row` + `dataset.species` is untouched
+
 ## [0.10.0] - 2026-09-13
 
 ### Added
