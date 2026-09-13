@@ -37,6 +37,10 @@ const SOURCES = [
   'src/sim/agents/plants/cranberry.ts',
   'src/sim/agents/plants/reed.ts',
   'src/sim/agents/plants/tree.ts',
+  // v0.12: the aquatic plants (algae mats / pondweed beds / water lily pads)
+  'src/sim/agents/plants/algae.ts',
+  'src/sim/agents/plants/pondweed.ts',
+  'src/sim/agents/plants/waterlily.ts',
   'src/sim/agents/animals/base.ts',
   'src/sim/corpses.ts',
   'src/sim/agents/animals/mouse.ts',
@@ -54,6 +58,10 @@ const SOURCES = [
   'src/sim/agents/animals/aquatic.ts',
   'src/sim/agents/animals/carp.ts',
   'src/sim/agents/animals/pike.ts',
+  // v0.12: the widened river food chain — roach/trout/duck
+  'src/sim/agents/animals/roach.ts',
+  'src/sim/agents/animals/trout.ts',
+  'src/sim/agents/animals/duck.ts',
   'src/sim/agents/index.ts',
   'src/sim/sim.ts',
   'src/sim/seedLife.ts',
@@ -137,6 +145,10 @@ try {
     const aquaticMod = tmpRequire('./sim/agents/animals/aquatic.js');
     const carpMod = tmpRequire('./sim/agents/animals/carp.js');
     const pikeMod = tmpRequire('./sim/agents/animals/pike.js');
+    // v0.12: the widened river food chain (roach/trout/duck species tables)
+    const roachMod = tmpRequire('./sim/agents/animals/roach.js');
+    const troutMod = tmpRequire('./sim/agents/animals/trout.js');
+    const duckMod = tmpRequire('./sim/agents/animals/duck.js');
     const corpsesMod = tmpRequire('./sim/corpses.js');
     // Phase 8: save payload serialization (pure — runs headlessly; the worker/IDB layers are browser-only)
     const saveSerializeMod = tmpRequire('./save/serialize.js');
@@ -171,6 +183,10 @@ try {
         aquatic: aquaticMod, // Phase 6 shared helpers: inRiverVolume/initAquaticAgent/aquaticSettle + depth constants
         carp: carpMod.CARP, // Phase 6 species tables (trait bounds for assertions)
         pike: pikeMod.PIKE,
+        roach: roachMod.ROACH, // v0.12 species tables (trait bounds for assertions)
+        trout: troutMod.TROUT,
+        duck: duckMod.DUCK,
+        duckZone: duckMod.duckZone, // v0.12 semi-aquatic zone predicate (duck invariant checks)
         corpses: corpsesMod, // corpse layer: spawnCorpse/findNearestCorpse/scavengeCorpse + decay constant
       },
       save: saveSerializeMod, // Phase 8: serializeWorld/deserializeWorld round-trip (pure binary layout)

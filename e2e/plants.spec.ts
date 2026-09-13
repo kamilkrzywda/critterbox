@@ -15,7 +15,7 @@ interface CritterboxSim {
 
 /** Species ids that must NEVER appear in the plant renderer (animals have their own renderer — leaking
  *  them in renders every animal as a moving generic cone, which reads as "plants moving"). */
-const ANIMAL_IDS = ['mouse', 'hare', 'hamster', 'deer', 'insect', 'frog', 'fox', 'stork', 'owl', 'crow', 'carp', 'pike'];
+const ANIMAL_IDS = ['mouse', 'hare', 'hamster', 'deer', 'insect', 'frog', 'fox', 'stork', 'owl', 'crow', 'carp', 'pike', 'roach', 'trout', 'duck'];
 
 test('plant ecosystem loads with a populated sim and population panel', async ({ page }) => {
   await page.goto('/');
@@ -31,6 +31,11 @@ test('plant ecosystem loads with a populated sim and population panel', async ({
   expect(cb.populations.grass?.count ?? 0).toBeGreaterThan(0);
   expect(cb.populations.tree?.count ?? 0).toBeGreaterThan(0);
 
+  // v0.12: aquatic plants seeded in water cells (seedLife pass A2) — the in-water food base.
+  expect(cb.populations.algae?.count ?? 0).toBeGreaterThan(0);
+  expect(cb.populations.pondweed?.count ?? 0).toBeGreaterThan(0);
+  expect(cb.populations.waterlily?.count ?? 0).toBeGreaterThan(0);
+
   // The plant renderer must instance PLANTS ONLY — no animal species may leak in (regression guard:
   // leaked animals render as generic cones that follow the animal, i.e. "visibly moving plants").
   for (const sp of ANIMAL_IDS) {
@@ -40,7 +45,7 @@ test('plant ecosystem loads with a populated sim and population panel', async ({
   // The population panel shows a live row for every plant species.
   const panel = page.locator('#population-panel');
   await expect(panel).toBeVisible();
-  for (const sp of ['grass', 'clover', 'cranberry', 'reed', 'tree']) {
+  for (const sp of ['grass', 'clover', 'cranberry', 'reed', 'tree', 'algae', 'pondweed', 'waterlily']) {
     await expect(panel.locator(`.pop-row[data-species="${sp}"]`)).toBeVisible();
   }
 });

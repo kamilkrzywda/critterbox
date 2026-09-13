@@ -74,7 +74,7 @@ test('selecting an animal follows it with a smoothed camera; plants never follow
   // First animal id: plants are seeded BEFORE any animal, and mice come first among animals.
   const ids = await page.evaluate(() => {
     const c = (window as unknown as { __critterbox: Critterbox }).__critterbox;
-    const plants = ['grass', 'clover', 'cranberry', 'reed', 'tree'].reduce(
+    const plants = ['grass', 'clover', 'cranberry', 'reed', 'tree', 'algae', 'pondweed', 'waterlily'].reduce(
       (s, sp) => s + (c.populations[sp]?.count ?? 0), 0,
     );
     return { plantId: 1, animalId: plants + 1 };

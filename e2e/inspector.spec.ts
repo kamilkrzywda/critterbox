@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
  * Entity inspector e2e (Phase 8): selectAgent(id) via the debug surface opens the side panel showing that
  * agent's live parameters — species + energy for any agent, sex for animals; Esc deselects and hides the
  * panel. The first animal id is derivable without a new API: plants are seeded BEFORE any animal (seedLife
- * passes A/B then C), so (total plant count) + 1 = the first mouse on a fresh world. #scene visibility is
+ * passes A/B/A2 then C), so (total plant count) + 1 = the first mouse on a fresh world. #scene visibility is
  * the boot gate (async restore-on-load appends it last).
  */
 
@@ -25,7 +25,7 @@ test('inspector: selectAgent opens the panel with live params, Esc deselects', a
 
   const ids = await page.evaluate(() => {
     const c = (window as unknown as { __critterbox: Critterbox }).__critterbox;
-    const plants = ['grass', 'clover', 'cranberry', 'reed', 'tree'].reduce(
+    const plants = ['grass', 'clover', 'cranberry', 'reed', 'tree', 'algae', 'pondweed', 'waterlily'].reduce(
       (s, sp) => s + (c.populations[sp]?.count ?? 0), 0,
     );
     return { plantId: 1, animalId: plants + 1, agentCount: c.agentCount };

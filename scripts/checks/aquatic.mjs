@@ -9,8 +9,8 @@
  */
 
 export default {
-  /** Over N ticks on the real default world, every carp/pike sits over an underwater cell with y strictly
-   *  between terrain and water level (and seeding placed them in deep cells). */
+  /** Over N ticks on the real default world, every fish sits over an underwater cell with y strictly
+   *  between terrain and water level (and seeding placed them in deep cells); ducks stay in their zone. */
   fishStayUnderwater(ctx) {
     const { generateWorld } = ctx.worldgen;
     const Sim = ctx.sim.Sim;
@@ -19,15 +19,16 @@ export default {
     const sim = new Sim(generateWorld({ seed: 1337, size: 300 }));
     seedLife(sim);
 
+    const FISH = ['carp', 'pike', 'roach', 'trout']; // v0.12: the widened river food chain
     const fishAt = (t) => {
       const out = [];
-      for (const a of sim.agents) if (a.species === 'carp' || a.species === 'pike') out.push(a);
+      for (const a of sim.agents) if (FISH.includes(a.species)) out.push(a);
       return out;
     };
 
     // Seeding invariant: every seeded fish is over a DEEP cell (height < waterLevel − 1).
     const seeded = fishAt(0);
-    ctx.check(`fishStayUnderwater: carp + pike were seeded (${seeded.length} fish)`, seeded.length >= 30);
+    ctx.check(`fishStayUnderwater: all river fish were seeded (${seeded.length} fish)`, seeded.length >= 80);
     let deepOk = true;
     for (const a of seeded) {
       if (sim.world.heightAt(a.pos.x, a.pos.z) >= sim.world.waterLevel - 1) deepOk = false;
@@ -45,6 +46,14 @@ export default {
       }
     }
     ctx.check(`fishStayUnderwater: all fish over underwater cells with terrain < y < waterLevel for ${STEPS} ticks`, violations === 0);
+
+    // Ducks (v0.12) are semi-aquatic — they may be on land, but only inside their zone (river volume + shore band).
+    let duckViolations = 0;
+    for (const a of sim.agents) {
+      if (a.species !== 'duck') continue;
+      if (!ctx.sim.duckZone(sim, a.pos.x, a.pos.z)) duckViolations++;
+    }
+    ctx.check(`fishStayUnderwater: every duck stays in its zone after ${STEPS} ticks`, duckViolations === 0);
   },
 
   /** A hungry carp feeds on shore reed (grazing works) and the plant regrows afterwards. */
@@ -171,12 +180,13 @@ export default {
     const Sim = ctx.sim.Sim;
     const seedLife = ctx.sim.seedLife;
 
+    const FISH = ['carp', 'pike', 'roach', 'trout']; // v0.12: the full river food chain
     const run = () => {
       const sim = new Sim(generateWorld({ seed: 2026, size: 300 }));
       seedLife(sim);
       for (let i = 0; i < 300; i++) sim.step();
       const out = {};
-      for (const sp of ['carp', 'pike']) {
+      for (const sp of FISH) {
         const list = [];
         for (const a of sim.agents) {
           if (a.species === sp) list.push([a.id, a.pos.x, a.pos.y, a.pos.z, a.energy]);
@@ -189,11 +199,99 @@ export default {
 
     const A = run();
     const B = run();
-    ctx.check(`aquaticDeterminism: same seed → identical fish counts (carp ${A.carp.length}, pike ${A.pike.length})`,
-      A.carp.length === B.carp.length && A.pike.length === B.pike.length && A.carp.length > 0 && A.pike.length > 0);
+    ctx.check(`aquaticDeterminism: same seed → identical fish counts (carp ${A.carp.length}, pike ${A.pike.length}, roach ${A.roach.length}, trout ${A.trout.length})`,
+      FISH.every((sp) => A[sp].length === B[sp].length && A[sp].length > 0));
     const same = (X, Y) => X.length === Y.length && X.every((row, i) => row.every((v, j) => v === Y[i][j]));
-    ctx.check('aquaticDeterminism: identical carp positions/energy across runs', same(A.carp, B.carp));
-    ctx.check('aquaticDeterminism: identical pike positions/energy across runs', same(A.pike, B.pike));
+    for (const sp of FISH) {
+      ctx.check(`aquaticDeterminism: identical ${sp} positions/energy across runs`, same(A[sp], B[sp]));
+    }
+  },
+
+  /** Algae spread across open water over time ("flowing on water and just spreading around") — new patches
+   *  appear, all stay in the water, and every patch sits at the surface. */
+  algaeSpreadsInWater(ctx) {
+    const Sim = ctx.sim.Sim;
+    const ALGAE = ctx.sim.registry.speciesRegistry.get('algae');
+    const world = riverWorld(60);
+
+    const sim = new Sim(world);
+    // Four mature patches spread across the deep channel (z=5 strip, well inside |x|<4).
+    for (let i = 0; i < 4; i++) {
+      const a = sim.addAgent('algae', -3 + i * 2, 5);
+      a.energy = ALGAE.maxEnergy; // mature → fruiting-eligible from the first tick
+      a.state = 'fruiting';
+    }
+    const countAt = () => sim.agents.filter((a) => a.species === 'algae').length;
+    const before = countAt();
+
+    const STEPS = 900; // ~30 s at 1× — enough for several self-seed draws per patch
+    let violations = 0;
+    for (let i = 1; i <= STEPS; i++) {
+      sim.step();
+      if (i % 50 === 0) {
+        for (const a of sim.agents) {
+          if (a.species !== 'algae') continue;
+          const h = world.heightAt(a.pos.x, a.pos.z);
+          // In water AND seated at the surface — the two invariants of an algae patch.
+          if (!(h < world.waterLevel && Math.abs(a.pos.y - world.waterLevel) < 1e-6)) violations++;
+        }
+      }
+    }
+
+    ctx.check(`algaeSpreadsInWater: the mat spread (${before} → ${countAt()} patches in ${STEPS} ticks)`, countAt() > before);
+    ctx.check('algaeSpreadsInWater: every patch stays in water at the surface', violations === 0);
+  },
+
+  /** Aquatic plants seat where their species dictates: algae/water lily float at the surface, pondweed on the floor. */
+  aquaticPlantSeating(ctx) {
+    const Sim = ctx.sim.Sim;
+    const world = riverWorld(60); // deep channel floor h=4 for |x|<4, water level 8
+
+    const sim = new Sim(world);
+    const algae = sim.addAgent('algae', 1, 0);
+    const pondweed = sim.addAgent('pondweed', 2, 0);
+    const lily = sim.addAgent('waterlily', -1, 0);
+    sim.step(); // one tick → updatePlant seats them per PlantSpecies.aquatic
+
+    ctx.check(`aquaticPlantSeating: algae floats at the surface (y=${algae.pos.y})`, Math.abs(algae.pos.y - world.waterLevel) < 1e-6);
+    ctx.check(`aquaticPlantSeating: water lily floats at the surface (y=${lily.pos.y})`, Math.abs(lily.pos.y - world.waterLevel) < 1e-6);
+    ctx.check(`aquaticPlantSeating: pondweed anchors on the floor (y=${pondweed.pos.y}, floor h=4)`, Math.abs(pondweed.pos.y - 4) < 1e-6);
+  },
+
+  /** Two-tier diet: with in-water algae visible, a carp ignores the CLOSER shore reed — fallback food is only
+   *  eaten when nothing primary is seen (the v0.12 fix for carp parking at the bank). */
+  carpPrefersInWaterFood(ctx) {
+    const Sim = ctx.sim.Sim;
+    const CARP = ctx.sim.carp;
+    const ALGAE = ctx.sim.registry.speciesRegistry.get('algae');
+    const world = riverWorld(60);
+
+    const sim = new Sim(world);
+    // Reed on the bank (x=4.5 → h=8.3, within shore reach) at 3.5 m; algae in the channel (x=-3) at 4 m —
+    // the reed is CLOSER, so only the tier rule can explain why the carp takes the algae instead.
+    const reed = sim.addAgent('reed', 4.5, 0);
+    reed.energy = 110;
+    reed.state = 'fruiting';
+    const algae = sim.addAgent('algae', -3, 0);
+    algae.energy = ALGAE.maxEnergy;
+    algae.state = 'fruiting';
+
+    const carp = sim.addAgent('carp', 1, 0); // deep channel between the two foods
+    carp.sex = 'm';
+    carp.traits = midTraits(CARP);
+    carp.energy = 100; // hungry (capacity ~300) → forages from the first decision tick
+
+    const algaeBefore = algae.energy;
+    let grazedAlgaeAt = -1;
+    for (let i = 0; i < 250; i++) { // fixed horizon — nothing but the carp can touch this algae
+      sim.step();
+      if (algae.energy < algaeBefore) { grazedAlgaeAt = i + 1; break; }
+    }
+    ctx.check(`carpPrefersInWaterFood: the carp grazed the in-water algae (${grazedAlgaeAt} ticks)`, grazedAlgaeAt > 0);
+    ctx.check(
+      `carpPrefersInWaterFood: the closer shore reed was left untouched (energy ${reed.energy.toFixed(1)} of 110)`,
+      reed.energy >= 110 - 1e-6,
+    );
   },
 };
 
