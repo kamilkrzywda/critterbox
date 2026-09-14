@@ -17,6 +17,7 @@ import { Sim } from './sim/sim';
 import { seedLife } from './sim/seedLife';
 import { PlantRenderer } from './render/plants';
 import { AnimalRenderer } from './render/animals';
+import { flightAltFor } from './render/animalGeometry';
 import { HoverHighlight } from './render/hoverHighlight';
 import { initPopulationPanel, type PopRow } from './ui/population';
 import { initEnvPanel } from './ui/envPanel';
@@ -161,7 +162,7 @@ function buildWorld(seed: number, size: number): World {
 function syncRenderers(): void {
   if (!sim || !plantRenderer || !animalRenderer) return;
   plantRenderer.sync(sim.agents); // initial full instance upload
-  animalRenderer.sync(sim.agents);
+  animalRenderer.sync(sim.agents, sim.stepCount); // step drives the wing-flap phase for flying birds
 }
 
 /** Generate a FRESH world: build + deterministic life seeding (same seed+size → identical population). */
@@ -283,7 +284,7 @@ function stepSim(): void {
   if (!sim || !plantRenderer || !animalRenderer) return;
   sim.step(); // advance agents one fixed tick (plants: growth/stages/death; animals: behaviour/eating/breeding)
   plantRenderer.sync(sim.agents); // incremental instance updates from the change-feed
-  animalRenderer.sync(sim.agents); // full matrix rewrite each frame (low counts — fine)
+  animalRenderer.sync(sim.agents, sim.stepCount); // full matrix rewrite each frame (low counts — fine); step drives wing flap
 }
 
 // --- entity inspector selection (Phase 8) ------------------------------------------------------
@@ -376,7 +377,8 @@ function updateSelectionMarker(): void {
     selectionMarker.visible = false;
     return;
   }
-  selectionMarker.position.set(a.pos.x, a.pos.y + 0.15, a.pos.z);
+  // Flying birds render at their species' flight altitude above the sim seat — keep the ring with them (shared lookup).
+  selectionMarker.position.set(a.pos.x, a.pos.y + 0.15 + (a.data?.flying ? flightAltFor(a.species) : 0), a.pos.z);
   selectionMarker.visible = true;
 }
 

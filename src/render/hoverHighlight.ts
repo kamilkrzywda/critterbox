@@ -9,6 +9,7 @@
 
 import * as THREE from 'three';
 import type { Agent } from '../sim/types';
+import { flightAltFor } from './animalGeometry';
 
 /** Initial capacity: just above the largest animal popCap (insects = 600). Plants can exceed it — see grow(). */
 export const HOVER_BASE_CAPACITY = 640;
@@ -67,6 +68,7 @@ export class HoverHighlight {
   sync(agents: Agent[]): void {
     const id = this.speciesId;
     if (!id) return; // not hovering — zero cost
+    const alt = flightAltFor(id); // flying agents of the hovered species sit higher — shared lookup (animalGeometry.ts)
     const w = this.work;
     w.length = 0;
     for (const a of agents) if (a.species === id) w.push(a);
@@ -75,7 +77,7 @@ export class HoverHighlight {
     }
     for (let i = 0; i < w.length; i++) {
       const a = w[i];
-      this.tmpMat.makeTranslation(a.pos.x, a.pos.y + 0.15, a.pos.z); // same ground offset as the selection ring
+      this.tmpMat.makeTranslation(a.pos.x, a.pos.y + 0.15 + (a.data?.flying ? alt : 0), a.pos.z); // ground offset (+ flight altitude while airborne)
       this.object.setMatrixAt(i, this.tmpMat);
     }
     this.object.count = w.length;
