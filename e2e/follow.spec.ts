@@ -71,26 +71,31 @@ test('selecting an animal follows it with a smoothed camera; plants never follow
   await page.goto('/');
   await expect(page.locator('#scene')).toBeVisible();
 
-  // First animal id: plants are seeded BEFORE any animal, and mice come first among animals.
-  const ids = await page.evaluate(() => {
+  const c = await cb(page);
+  expect(c.following).toBe(null); // nothing selected yet
+
+  // First LIVE animal id: plants are seeded before any animal, but they self-seed seedlings from grazing,
+  // so the live-plant count drifts up within seconds of boot and `plants + 1` can skip past every mouse.
+  // Probe upward instead — select successive ids until a follow starts (only animals start one; dead/plant
+  // ids leave `following` null). One evaluate: no sim step can interleave inside the loop.
+  const animalId = await page.evaluate(() => {
     const c = (window as unknown as { __critterbox: Critterbox }).__critterbox;
     const plants = ['grass', 'clover', 'cranberry', 'reed', 'tree', 'algae', 'pondweed', 'waterlily'].reduce(
       (s, sp) => s + (c.populations[sp]?.count ?? 0), 0,
     );
-    return { plantId: 1, animalId: plants + 1 };
+    for (let id = plants + 1; id < plants + 401; id++) { // ~400 ids — far more than any animal population
+      c.selectAgent(id);
+      if (c.following !== null) return id;
+    }
+    return null;
   });
-
-  const c = await cb(page);
-  expect(c.following).toBe(null); // nothing selected yet
-
-  // Select the first mouse → follow starts immediately.
-  await page.evaluate((id: number) => (window as unknown as { __critterbox: Critterbox }).__critterbox.selectAgent(id), ids.animalId);
-  expect(await cb(page).then((x) => x.following)).toBe(ids.animalId);
+  expect(animalId).not.toBeNull(); // a live animal exists to follow
+  expect(await cb(page).then((x) => x.following)).toBe(animalId); // the probe's selectAgent started the follow
 
   const before = await page.evaluate((id: number) => {
     const c = (window as unknown as { __critterbox: Critterbox }).__critterbox;
     return { cam: c.camera.pos, p: c.agentPos(id)! };
-  }, ids.animalId);
+  }, animalId);
 
   // Let the mouse wander at 4× until it has ACTUALLY moved (animals can idle between decisions — poll,
   // don't assume a fixed wait is enough), then freeze and let the smoothing converge: with the target
@@ -99,11 +104,14 @@ test('selecting an animal follows it with a smoothed camera; plants never follow
   let p = before.p;
   for (let i = 0; i < 16 && dist(p, before.p) < 1.5; i++) { // up to ~8 s of real time at 4×
     await page.waitForTimeout(500);
-    p = (await page.evaluate((id: number) => (window as unknown as { __critterbox: Critterbox }).__critterbox.agentPos(id), ids.animalId))!;
+    p = (await page.evaluate((id: number) => (window as unknown as { __critterbox: Critterbox }).__critterbox.agentPos(id), animalId))!;
   }
   expect(dist(p, before.p)).toBeGreaterThan(1.5); // premise: the animal really did move
 
   await page.evaluate(() => (window as unknown as { __critterbox: Critterbox }).__critterbox.setSpeed(0));
+  // Re-read the position NOW that the sim is frozen — `p` was last polled up to 500 ms earlier, and at 4× a
+  // hare covers metres in that gap (the stale p broke the offset-preservation assertion below).
+  p = (await page.evaluate((id: number) => (window as unknown as { __critterbox: Critterbox }).__critterbox.agentPos(id), animalId))!;
   await page.waitForTimeout(2500); // λ = 3 → ~99% converged in well under this
   const afterCam = (await cb(page)).camera.pos;
 
@@ -115,8 +123,10 @@ test('selecting an animal follows it with a smoothed camera; plants never follow
   expect(await cb(page).then((x) => x.following)).toBe(null);
   expect(await cb(page).then((x) => x.selected)).toBe(null);
 
-  // Plants select fine but never start a follow.
-  await page.evaluate((id: number) => (window as unknown as { __critterbox: Critterbox }).__critterbox.selectAgent(id), ids.plantId);
-  expect(await cb(page).then((x) => x.selected)).toBe(ids.plantId);
+  // Plants select fine but never start a follow. Ids are assigned in seed order and plants are seeded first,
+  // so id 1 is always a plant (unlike the animal boundary, it can't drift).
+  const plantId = 1;
+  await page.evaluate((id: number) => (window as unknown as { __critterbox: Critterbox }).__critterbox.selectAgent(id), plantId);
+  expect(await cb(page).then((x) => x.selected)).toBe(plantId);
   expect(await cb(page).then((x) => x.following)).toBe(null);
 });
