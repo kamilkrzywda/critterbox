@@ -52,6 +52,8 @@ export const STORK: AnimalSpecies = {
   popCap: 16,
   foodSpecies: [], // carnivore — prey only
   preySpecies: ['frog', 'mouse'],
+  canFly: true, // v0.13 — flies while foraging/wandering (default gate); render adds altitude + wing flap from data.flying
+  airSpeed: 0.21, // m/tick at speed=1 — ~1.5× the ground speed (baseSpeed 0.14); burst-flight tuning: full 2× collapsed frogs
   bodySize: [0.3, 1.0, 0.5], // world-space meters at mid size trait → rendered 0.75–1.25 m tall on the legs (a real stork — the tallest bird)
   validTarget: inStorkZone, // marsh/shallow-water constraint (wander targets only — see module header)
   activityLevel: (sim) => 0.3 + 0.7 * sim.environment.light, // Phase 7: DIURNAL — full foraging by day, reduced at night (see fox.ts)

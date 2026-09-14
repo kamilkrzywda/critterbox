@@ -85,6 +85,23 @@ export const SAT_FULL_MEAL_FRACTION = 0.5;
  *  patch continuously (Phase 5 stability tuning). */
 export const SAT_DECAY_PER_TICK = 0.006;
 
+/** Per-meter energy cost multiplier while flying (v0.13): flapping is ~1.8× as expensive per meter as the
+ *  same species' ground/water movement. Applied in moveToward when data.flying is set — see AnimalSpecies.canFly.
+ *  Tuned up from 1.6 with the burst-flight cycle: flight must stay clearly faster than walking but not so cheap
+ *  that sustained foraging flights out-earn their energy cost (stability gate). */
+export const FLIGHT_COST_MULT = 1.8;
+
+/** Burst-flight budget (v0.13 stability tuning): a bird may stay airborne for at most this many CONSECUTIVE
+ *  ticks per burst (data.flightT counts them). Always-on flight let stork/owl/crow sweep ~2× the ground area
+ *  and collapsed insect/frog in the 20k-step run — real birds flap in bouts, so each takeoff gets a limited
+ *  budget. Tuned with REST_TICKS below until the stability gate is green again. */
+export const MAX_FLIGHT_BURST = 90;
+/** Forced-ground ticks after a burst runs to completion (data.restT counts them down): even while still
+ *  seeking/wandering the bird stays on the ground for this long before it may take wing again — the rest of
+ *  the flap/rest cycle. A voluntary landing (arrive+eat, duck gate failing) breaks the burst instead and just
+ *  resets data.flightT, so the next takeoff gets a fresh full budget without an extra forced rest. */
+export const REST_TICKS = 60;
+
 // --- trait model ------------------------------------------------------------------------------
 
 /** A heritable numeric trait: bounds for clamping + mutation σ (Gaussian sd applied at birth). */
@@ -174,6 +191,16 @@ export interface AnimalSpecies extends Species {
    *  at their depth fraction of the water column. Returns true when the agent's position was clamped — the
    *  pending target is then dropped so the animal re-decides instead of grinding against the shore. */
   settlePosition?: (sim: Sim, a: Agent) => boolean;
+  /** Flight capability (v0.13): when true the bird latches `data.flying` each tick and moves at its airborne
+   *  speed with a higher per-meter energy cost while airborne — in BURSTS of ≤ MAX_FLIGHT_BURST consecutive
+   *  ticks followed by REST_TICKS forced on the ground (see latchFlight). The sim NEVER changes altitude —
+   *  pos.y stays at the terrain/water seat level; the render layer reads data.flying to lift the body + flap wings. */
+  canFly?: boolean;
+  /** Airborne move speed in m/tick (at speed trait = 1). Defaults to baseSpeed × 2 when unset. */
+  airSpeed?: number;
+  /** Optional per-tick flight gate overriding the default rule (fly while seekFood/wander) — e.g. ducks fly
+   *  only on a fraction of their far-foraging ticks. Returns true to be airborne this tick. Unset = default. */
+  flightGate?: (sim: Sim, a: Agent) => boolean;
   /** World-space body box dimensions in METERS at the MIDPOINT of the size trait (width, height, depth) —
    *  the explicit per-species size mapping for rendering. The renderer maps the full size-trait range onto
    *  a ±25% band around these values via visualScale() (see below), so an individual's rendered body stays
@@ -321,6 +348,59 @@ export function tryBreed(sim: Sim, a: Agent, b: Agent, sp: AnimalSpecies): boole
   return true;
 }
 
+// --- flight (v0.13) ---------------------------------------------------------------------------------
+
+/** Raw flight intent for this tick: the species' gate when set (ducks), else the default rule — airborne
+ *  while seeking food or wandering. Pure in (sim, agent). The burst/rest budget below decides whether that
+ *  intent is actually honoured; eat/mate/idle never fly because their state fails both the default rule and
+ *  every species gate. */
+function flightWant(as_: AnimalSpecies, sim: Sim, a: Agent): boolean {
+  if (!as_.canFly) return false;
+  return as_.flightGate ? as_.flightGate(sim, a) : (a.state === ANIMAL_STATE_SEEK_FOOD || a.state === ANIMAL_STATE_WANDER);
+}
+
+/** Pre-move flight latch (v0.13 burst-flight): fixes data.flying for this tick AND advances the per-agent
+ *  burst/rest counters in a.data — called once, before movement, so speed/cost see the right mode:
+ *   - forced rest (data.restT > 0) → grounded, one rest tick consumed;
+ *   - previous burst ran to completion (data.flightT ≥ MAX_FLIGHT_BURST) → the landing tick: start a fresh
+ *     REST_TICKS of forced ground even if the bird is still seeking/wandering (or just landed on a meal);
+ *   - gate fails (not seeking/wandering, or duck's far-target roll failed) → grounded and the in-progress
+ *     burst is broken — data.flightT resets so the next takeoff gets a full budget;
+ *   - otherwise airborne: data.flightT += 1.
+ * Deterministic: pure in (sim, agent), no randomness of its own. */
+function latchFlight(as_: AnimalSpecies, sim: Sim, a: Agent): void {
+  const d = a.data ??= {};
+  if ((d.restT ?? 0) > 0) { // forced rest — grounded, consume one tick of it
+    d.restT -= 1;
+    d.flightT = 0;
+    d.flying = 0;
+    return;
+  }
+  const flown = d.flightT ?? 0;
+  if (flown >= MAX_FLIGHT_BURST) { // burst exhausted → forced rest begins now, whatever the state is
+    d.restT = REST_TICKS;
+    d.flightT = 0;
+    d.flying = 0;
+    return;
+  }
+  if (!flightWant(as_, sim, a)) { // grounded this tick — any in-progress burst is broken (fresh budget next takeoff)
+    d.flightT = 0;
+    d.flying = 0;
+    return;
+  }
+  d.flightT = flown + 1; // airborne this tick — one more consecutive flight tick of the current burst
+  d.flying = 1;
+}
+
+/** Post-act flight re-sync (v0.13): the act phase can only END a flight (arrive at target → EAT) and never
+ *  start one, so just clear data.flying when the end-of-tick state no longer wants flight — an animal that
+ *  arrives and eats must not keep flying=1 into its EAT/IDLE state. Counters are untouched: they were fixed
+ *  at pre-move (the bird really did fly this tick even if it landed on arrival). */
+function resyncFlight(as_: AnimalSpecies, sim: Sim, a: Agent): void {
+  const d = a.data ??= {};
+  if (!flightWant(as_, sim, a)) d.flying = 0;
+}
+
 // --- per-tick update -------------------------------------------------------------------------------
 
 /**
@@ -357,6 +437,12 @@ export function updateAnimal(sim: Sim, a: Agent): boolean {
 
   // --- behaviour decision, sampled every DECISION_EVERY ticks, staggered by id --------------------
   if ((sim.stepCount + a.id) % DECISION_EVERY === 0) decide(sim, a, as_);
+
+  // --- flight mode (v0.13 burst-flight): flying species latch data.flying + advance their burst/rest
+  // counters BEFORE moving so this tick's moveToward uses the airborne speed + cost. Re-synced after the act
+  // phase below to match the end-of-tick state — an animal that arrives and eats must not keep flying=1 into
+  // its EAT/IDLE state (see latchFlight/resyncFlight).
+  if (as_.canFly) latchFlight(as_, sim, a);
 
   // --- act: walk toward the stored target; eat when close enough -----------------------------------
   const mem = a.data;
@@ -422,6 +508,10 @@ export function updateAnimal(sim: Sim, a: Agent): boolean {
       moveToward(sim, a, as_, t, dx, dz, d2);
     }
   }
+
+  // --- flight re-sync (v0.13 burst-flight): clear data.flying if the act phase ended the flight (arrive+eat);
+  // counters stay as fixed at pre-move so render + checks read a stable end-of-tick value.
+  if (as_.canFly) resyncFlight(as_, sim, a);
 
   // --- aquatic fixup (Phase 6): species with a settlePosition hook re-seat themselves after acting — fish
   // clamp back into the river volume when a move dried out and sit at their depth fraction of the column.
@@ -707,7 +797,12 @@ export function canAttemptBreed(sim: Sim, a: Agent, sp: AnimalSpecies): boolean 
  *  zero. render/animals.ts turns each instance by this value (+Z is the geometry's front axis). */
 function moveToward(sim: Sim, a: Agent, sp: AnimalSpecies, t: Record<string, number>, dx: number, dz: number, d2: number): void {
   const dist = Math.sqrt(d2);
-  const stepLen = Math.min(sp.baseSpeed * (t.speed ?? 1), dist);
+  // v0.13 flight: airborne birds (data.flying set by updateAnimal) move at airSpeed and pay FLIGHT_COST_MULT
+  // per meter; the speed trait scales both modes equally. pos.y is re-seated to terrain below either way —
+  // no sim-side altitude, the render layer adds visual height while flying.
+  const flying = !!a.data?.flying;
+  const baseMove = flying ? (sp.airSpeed ?? sp.baseSpeed * 2) : sp.baseSpeed;
+  const stepLen = Math.min(baseMove * (t.speed ?? 1), dist);
   const px = a.pos.x;
   const pz = a.pos.z;
   a.pos.x += (dx / dist) * stepLen;
@@ -729,7 +824,7 @@ function moveToward(sim: Sim, a: Agent, sp: AnimalSpecies, t: Record<string, num
     a.data.heading = Math.atan2(mz, mx);
   }
 
-  a.energy -= sp.moveCostPerMeter * stepLen; // movement cost per meter moved
+  a.energy -= sp.moveCostPerMeter * (flying ? FLIGHT_COST_MULT : 1) * stepLen; // movement cost per meter moved (×FLIGHT_COST_MULT airborne)
 }
 
 function clampN(v: number, lo: number, hi: number): number {

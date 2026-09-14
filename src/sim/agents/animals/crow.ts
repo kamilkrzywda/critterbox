@@ -44,6 +44,8 @@ export const CROW: AnimalSpecies = {
   popCap: 40,
   foodSpecies: ['cranberry'], // berries — the cheap generalist bonus on top of corpses + insects
   preySpecies: ['insect'],
+  canFly: true, // v0.13 — flies while foraging/wandering (default gate); render adds altitude + wing flap from data.flying
+  airSpeed: 0.19, // m/tick at speed=1 — ~1.5× the ground speed (baseSpeed 0.13); burst-flight tuning: full 2× swept insect patches out
   bodySize: [0.2, 0.26, 0.38], // world-space meters at mid size trait → rendered 0.2–0.33 m high, 0.29–0.48 m long (a real crow)
   decide: scavengerDecide, // corpse first when hungry, then insects/berries — see corpses.ts
 };

@@ -19,11 +19,41 @@
 import { registerSpecies } from '../../registry';
 import type { AnimalSpecies } from './base';
 import { AQUATIC_BAD_TARGET_COOLDOWN_ANIMAL, AQUATIC_BAD_TARGET_COOLDOWN_PLANT, inRiverVolume } from './aquatic';
-import type { Agent } from '../../types';
+import { ANIMAL_STATE_SEEK_FOOD, type Agent } from '../../types';
+import { agentRand } from '../../rng';
 import type { Sim } from '../../sim';
 
 /** Meters either side of the water line a duck may walk on land (the marsh band it forages). */
 const DUCK_SHORE_BAND = 4;
+
+// --- flight (v0.13) ---------------------------------------------------------------------------
+/** Meters from a seekFood target at which a duck will consider taking wing — only FAR food is flown to;
+ *  near meals are walked/swum (flying is expensive, see FLIGHT_COST_MULT in base.ts). Tuned to the duck's
+ *  actual foraging scale: in the standard world its nearest edible rarely exceeds ~10 m (dense grass/clover/
+ *  algae), so "far" = a meal at the outer edge of its range (~6 m) — a genuine short flight, not a hop. */
+const DUCK_FLIGHT_MIN_DIST = 6;
+/** Fraction of far-foraging ticks on which a duck actually flies (deterministic per id+tick via agentRand) —
+ *  ducks mostly swim/walk and only occasionally make short flights to distant food. */
+const DUCK_FLIGHT_PROB = 0.35;
+/** Salt for the duck flight roll — distinguishes it from other per-agent draws at the same (id, step). */
+const DUCK_FLIGHT_SALT = 0x7f1a;
+
+/**
+ * Flight gate for ducks (base.ts `flightGate` hook, v0.13): a duck takes wing ONLY while SEEKING FOOD with a
+ * FAR target (> DUCK_FLIGHT_MIN_DIST m away) AND on a deterministic per-tick roll (< DUCK_FLIGHT_PROB). It
+ * never flies while wandering/idle/eating/mating — mostly it swims/walks, with occasional short flights to
+ * distant food. Pure in (sim, agent): same id+step → same outcome (agentRand), so the flight pattern is
+ * reproducible and independent of processing order.
+ */
+export function duckFlightGate(sim: Sim, a: Agent): boolean {
+  if (a.state !== ANIMAL_STATE_SEEK_FOOD) return false; // ducks never fly outside active foraging
+  const d = a.data;
+  if (!d || d.tx === undefined || d.tz === undefined) return false;
+  const dx = d.tx - a.pos.x;
+  const dz = d.tz - a.pos.z;
+  if (Math.hypot(dx, dz) <= DUCK_FLIGHT_MIN_DIST) return false; // near food — walk/swim to it
+  return agentRand(a.id, sim.stepCount, DUCK_FLIGHT_SALT) < DUCK_FLIGHT_PROB;
+}
 
 /** True when (x,z) is in the duck's zone: swimmable river volume OR the shore band around the water line. */
 export function duckZone(sim: Sim, x: number, z: number): boolean {
@@ -55,6 +85,11 @@ function findNearbyDuckZone(sim: Sim, x: number, z: number): { x: number; z: num
  * and remember the failed target (same cooldown pattern as aquaticSettle). Returns true when clamped.
  */
 export function duckSettle(sim: Sim, a: Agent): boolean {
+  // v0.13 flight: an airborne duck is over whatever ground it's flying to — skip zone enforcement AND the
+  // position revert entirely so its flight path isn't snapped back to the last in-zone point. Normal seating
+  // resumes automatically on the landing tick (flying=0 → the full settle below runs again).
+  if (a.data?.flying) return false;
+
   if (!a.data) a.data = {};
   const d = a.data;
 
@@ -119,8 +154,10 @@ export const DUCK: AnimalSpecies = {
   foodSpecies: ['grass', 'clover', 'algae'], // shore grazer + surface forager (v0.12)
   fallbackFoodSpecies: ['waterlily'], // the floating flower is the last resort, not the menu
   bodySize: [0.25, 0.3, 0.7], // world-space meters at mid size trait → rendered ~0.5 m long (a real mallard)
+  canFly: true, // v0.13 — occasional short flights to far food; render adds altitude + wing flap from data.flying
+  flightGate: duckFlightGate, // flies only while seeking food >6 m away, and only on a ~35% per-tick roll (see above)
   validTarget: duckZone, // water + shore band constraint (wander targets only — see module header)
-  settlePosition: duckSettle, // clamp back into the zone + seat at surface/ground after every act
+  settlePosition: duckSettle, // clamp back into the zone + seat at surface/ground after every act (skipped while flying)
 };
 
 registerSpecies(DUCK);

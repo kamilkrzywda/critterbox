@@ -46,6 +46,8 @@ export const OWL: AnimalSpecies = {
   popCap: 16,
   foodSpecies: [], // carnivore — prey only
   preySpecies: ['mouse', 'hare'],
+  canFly: true, // v0.13 — flies while foraging/wandering (default gate); render adds altitude + wing flap from data.flying
+  airSpeed: 0.22, // m/tick at speed=1 — ~1.5× the ground speed (baseSpeed 0.15); burst-flight tuning parity with stork/crow
   bodySize: [0.32, 0.4, 0.4], // world-space meters at mid size trait → rendered 0.3–0.5 m high (a real owl)
   activityLevel: (sim) => 0.2 + 0.8 * (1 - sim.environment.light), // Phase 7: NOCTURNAL — full activity at night (light=0),
   // a small day floor (0.2) keeps crepuscular foraging so the night-compressed hunting window still balances

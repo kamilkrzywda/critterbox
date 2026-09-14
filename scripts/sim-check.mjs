@@ -69,6 +69,10 @@ const SOURCES = [
   'src/save/serialize.ts',
 ];
 
+// Optional positional arg: a substring filter on "file :: section" to run only a targeted subset — e.g.
+// `node scripts/sim-check.mjs flight` runs just the flight sections (AGENTS.md: never blind-run the full suite).
+const only = process.argv[2];
+
 let sections = 0;
 let passed = 0;
 let failed = 0;
@@ -204,16 +208,23 @@ try {
       const sectionMap = mod.default ?? mod;
       for (const [name, fn] of Object.entries(sectionMap)) {
         if (typeof fn !== 'function') continue;
+        const label = `${file} :: ${name}`;
+        if (only && !label.includes(only)) continue; // targeted run — skip sections outside the filter
         sections += 1;
-        console.log(`section: ${file} :: ${name}`);
+        console.log(`section: ${label}`);
         await fn(makeCtx(ctxExtra));
       }
     }
 
-    console.log(
-      `sim-check: ${sections} sections, ${passed + failed} checks — ${failed === 0 ? 'OK' : `${failed} FAILED`}`,
-    );
-    process.exitCode = failed === 0 ? 0 : 1;
+    if (only && sections === 0) {
+      console.error(`sim-check: no section matched filter "${only}"`);
+      process.exitCode = 1;
+    } else {
+      console.log(
+        `sim-check: ${sections} sections, ${passed + failed} checks — ${failed === 0 ? 'OK' : `${failed} FAILED`}`,
+      );
+      process.exitCode = failed === 0 ? 0 : 1;
+    }
   }
 } finally {
   rmSync(tmp, { recursive: true, force: true });
