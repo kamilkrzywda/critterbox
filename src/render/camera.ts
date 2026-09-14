@@ -23,6 +23,8 @@ const ARROW_ROT_SPEED = 1.5;
 const DOLLY_METERS_PER_100_DELTA = 3;
 /** Pitch clamp in radians (±89°) — never flip over the poles. */
 const PITCH_LIMIT = (89 * Math.PI) / 180;
+/** Pinch dolly: meters per pixel of pinch-distance change — same ratio as the wheel (3 m / 100 px). */
+const PINCH_DOLLY_METERS_PER_PX = DOLLY_METERS_PER_100_DELTA / 100;
 
 function clampPitch(p: number): number {
   return Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, p));
@@ -48,6 +50,12 @@ export class FreeFlightCamera {
   private lastX = 0;
   private lastY = 0;
 
+  // --- touch (v0.14): active pointers by identifier + pinch-dolly baseline ------------------------
+  private touches = new Map<number, { x: number; y: number }>();
+  private pinchDist = 0; // baseline distance between the two fingers (px)
+  /** True while any finger is down — one-finger contact flies forward on the W-key basis; clears only when all lift. */
+  private touchForward = false;
+
   /** Fired whenever the USER drives the camera (not programmatic setPos): 'move' for WASD/wheel
    *  position changes, 'look' for drag/arrow rotation. The follow-camera uses this to step aside when
    *  the user takes over position control while keeping look free (orbit around a followed animal). */
@@ -63,6 +71,13 @@ export class FreeFlightCamera {
     window.addEventListener('mousemove', this.onMouseMove);
     window.addEventListener('mouseup', this.onMouseUp);
     canvas.addEventListener('wheel', this.onWheel, { passive: false });
+    // Touch (v0.14): one finger flies forward + steers by drag, two fingers pinch-dolly. preventDefault on
+    // start/move stops page scroll/zoom and the compatibility mouse events so the untouched mouse path can't
+    // double-drive; pointer events (tap-select) are a separate stream and keep firing for selection.
+    canvas.addEventListener('touchstart', this.onTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', this.onTouchMove, { passive: false });
+    canvas.addEventListener('touchend', this.onTouchEnd);
+    canvas.addEventListener('touchcancel', this.onTouchCancel);
   }
 
   /** Remove all event listeners (page teardown). */
@@ -74,6 +89,10 @@ export class FreeFlightCamera {
     window.removeEventListener('mousemove', this.onMouseMove);
     window.removeEventListener('mouseup', this.onMouseUp);
     this.canvas.removeEventListener('wheel', this.onWheel);
+    this.canvas.removeEventListener('touchstart', this.onTouchStart);
+    this.canvas.removeEventListener('touchmove', this.onTouchMove);
+    this.canvas.removeEventListener('touchend', this.onTouchEnd);
+    this.canvas.removeEventListener('touchcancel', this.onTouchCancel);
   }
 
   // --- state access (e2e reads these via the debug surface) ---------------------------------
@@ -125,7 +144,7 @@ export class FreeFlightCamera {
     const cp = Math.cos(this.rot.pitch), sp = Math.sin(this.rot.pitch);
     const sy = Math.sin(this.rot.yaw), cy = Math.cos(this.rot.yaw);
     let mx = 0, my = 0, mz = 0;
-    if (this.keys.has('KeyW')) { mx += -sy * cp; my += sp; mz += -cy * cp; } // forward (incl. pitch)
+    if (this.keys.has('KeyW') || this.touchForward) { mx += -sy * cp; my += sp; mz += -cy * cp; } // forward (incl. pitch); touch contact flies like W
     if (this.keys.has('KeyS')) { mx += sy * cp; my -= sp; mz += cy * cp; }
     if (this.keys.has('KeyD')) { mx += cy; mz += -sy; } // strafe right, yaw-relative
     if (this.keys.has('KeyA')) { mx -= cy; mz += sy; }
@@ -152,6 +171,7 @@ export class FreeFlightCamera {
   private onBlur = (): void => {
     this.keys.clear();
     this.dragging = false;
+    this.touchForward = false; // no stuck flight after alt-tab (touchcancel normally covers it)
   };
 
   private onMouseDown = (e: MouseEvent): void => {
@@ -192,6 +212,76 @@ export class FreeFlightCamera {
     if (dist !== 0 && this.onUserInput) this.onUserInput('move'); // dolly changes the view distance — follow steps aside
     this.apply();
   };
+
+  // --- touch handlers (v0.14 mobile) -------------------------------------------------------------
+  // ONE finger → fly forward continuously on the W-key basis (MOVE_SPEED, incl. pitch — applied in update()
+  // while `touchForward` is set) WHILE steering by drag: pointer deltas rotate yaw/pitch with the same
+  // LOOK_SENSITIVITY + pitch clamp as the mouse drag. TWO fingers → pinch to dolly along the view direction
+  // only (no pan). Lifting one of two leaves the remaining finger in `touches`, so forward+steer resumes
+  // automatically. The mouse path above is untouched; touch and mouse never share state (`touches` map vs
+  // `dragging`).
+
+  private onTouchStart = (e: TouchEvent): void => {
+    e.preventDefault(); // kill scroll/zoom + compat mouse events; pointer events still fire for tap-select
+    for (const t of Array.from(e.changedTouches)) this.touches.set(t.identifier, { x: t.clientX, y: t.clientY });
+    if (this.touches.size === 2) this.resetPinchBaseline(); // second finger landed — re-baseline so no jump
+    this.touchForward = true; // any contact flies forward until every pointer lifts
+  };
+
+  private onTouchMove = (e: TouchEvent): void => {
+    e.preventDefault();
+    const changed = Array.from(e.changedTouches);
+    if (this.touches.size === 1 && changed.length === 1) {
+      // Single finger → steer (forward flight runs in update() while the finger is down), delta from this
+      // pointer's last stored position.
+      const t = changed[0];
+      const prev = this.touches.get(t.identifier);
+      this.touches.set(t.identifier, { x: t.clientX, y: t.clientY });
+      if (!prev) return; // move before start — just record the position
+      const dx = t.clientX - prev.x;
+      const dy = t.clientY - prev.y;
+      if (dx !== 0 || dy !== 0) {
+        this.rot.yaw -= dx * LOOK_SENSITIVITY; // drag right → look right (same as mouse)
+        this.rot.pitch = clampPitch(this.rot.pitch - dy * LOOK_SENSITIVITY); // drag down → look down
+        if (this.onUserInput) this.onUserInput('look');
+        this.apply();
+      }
+      return;
+    }
+    // Two or more fingers: record all, then pinch-dolly from the pair (no pan).
+    for (const t of changed) this.touches.set(t.identifier, { x: t.clientX, y: t.clientY });
+    if (this.touches.size < 2) return;
+    const [a, b] = [...this.touches.values()]; // exactly two in practice — first two otherwise
+    const dist = Math.hypot(b.x - a.x, b.y - a.y);
+    const dDolly = (dist - this.pinchDist) * PINCH_DOLLY_METERS_PER_PX; // pinch out (>0) → forward
+    this.pinchDist = dist;
+    if (dDolly !== 0) {
+      const cp = Math.cos(this.rot.pitch), sp = Math.sin(this.rot.pitch);
+      // forward (incl. pitch) — the same basis as WASD in update()
+      this.pos3.x += -Math.sin(this.rot.yaw) * cp * dDolly;
+      this.pos3.y += sp * dDolly;
+      this.pos3.z += -Math.cos(this.rot.yaw) * cp * dDolly;
+      if (this.onUserInput) this.onUserInput('move'); // pinch changes position — follow steps aside
+      this.apply();
+    }
+  };
+
+  private onTouchEnd = (e: TouchEvent): void => {
+    for (const t of Array.from(e.changedTouches)) this.touches.delete(t.identifier);
+    if (this.touches.size === 0) this.touchForward = false; // flag clears only when NO pointers remain
+  };
+
+  private onTouchCancel = (): void => {
+    // A system gesture aborts the whole touch sequence — drop every tracked pointer, not just changed ones.
+    this.touches.clear();
+    this.touchForward = false;
+  };
+
+  /** Re-baseline pinch distance from the two current pointers (called when a pair forms). */
+  private resetPinchBaseline(): void {
+    const [a, b] = [...this.touches.values()];
+    this.pinchDist = Math.hypot(b.x - a.x, b.y - a.y);
+  }
 
   /** Push pos/yaw/pitch into the three.js camera (YXZ euler: yaw around Y, then pitch). */
   private apply(): void {
