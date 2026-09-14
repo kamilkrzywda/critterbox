@@ -1,13 +1,11 @@
 # Changelog
 
-All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
-
-## [0.12.1] - 2026-09-13
+## [0.12.1] - 2026-09-13 22:51
 
 ### Changed
 - The world-gen overlay subtitle no longer hardcodes a version + feature list (it was stuck at v0.11.0) — it now shows only the live version pulled from package.json at build time, so it can never go stale again; the version is also a link to the GitHub CHANGELOG.md
 
-## [0.12.0] - 2026-09-13
+## [0.12.0] - 2026-09-13 21:58
 
 ### Added
 - Six new species widen the river food chain: plants **algae** (in-water mats, carp/roach forage), **pondweed** (deep-water beds) and **waterlily** (floating flowers); animals **roach** (small fast in-water grazer — the river's "mouse"), **trout** (mid predator eating roach + waterline insects) and **duck** (semi-aquatic: swims shallow water AND walks the marsh band; eats grass/clover/algae, no predators). The population panel gained a row for each of the six
@@ -20,7 +18,7 @@ All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 ### Fixed
 - Aquatic stability in long runs: unreachable-food starvation (via the reachability hooks above), algae mats dying from a single carp bite (maxEnergy raised so regrowth keeps pace with grazing), and trout/duck persistence — trout pairs now seed spaced across river basins, ducks made predator-free (a slow-breeding cap-14 species couldn't sustain fox predation)
 
-## [0.11.0] - 2026-09-13
+## [0.11.0] - 2026-09-13 13:44
 
 ### Added
 - Hover-inspect: moving the pointer over any plant or animal previews it in the inspector panel (the hovered agent takes priority; leaving falls back to the selected one, or hides when nothing is selected). The click-pick raycast was factored into a shared `pickAgentAtClient` used by both paths; hover picks are throttled to ~20 Hz and ≥4 px of pointer travel because `pickAgent` is O(instances) per species mesh
@@ -31,7 +29,7 @@ All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 - All HUD text unified to lowercase: inspector parameter labels (species/sex/age/energy/state/position), every species display name in the population panel + inspector, panel titles, world-panel labels and the "new world" button — reads consistently with the new console monospace font. The env indicator's `text-transform: capitalize` is gone (phase/weather were already lowercase strings)
 - Population panel rows now render as a proper 3-column CSS grid (`minmax(0, 1fr) auto auto`) instead of free-flowing flex: name left (ellipsis on overflow), count and avg-energy right-aligned with `tabular-nums` so all digits have uniform width and every row's columns line up vertically. Rows also gained a subtle hover highlight (rgba(255,255,255,0.1) background, 80 ms transition) complementing the existing hover-to-highlight-species behavior — the mouseover/mouseout delegation on `.pop-row` + `dataset.species` is untouched
 
-## [0.10.0] - 2026-09-13
+## [0.10.0] - 2026-09-13 10:19
 
 ### Added
 - Hover a population-panel row → highlight ALL agents of that species: an InstancedMesh ring layer (`src/render/hoverHighlight.ts`) reusing the inspector's selection-ring geometry (TorusGeometry(2, 0.15, 8, 32), laid flat) with a distinct cyan tint at ~55% opacity so "many" reads differently from the single active gold selection; one instance per live agent, positions refreshed each frame while hovered and zero cost otherwise. Initial capacity 640 (just above the insect popCap of 600 — the largest animal population), growing on demand like AnimalRenderer's for plant populations and never shrinking back. Rows are wired via event delegation on the panel container (one mouseover/mouseout pair — no per-row listeners to leak or duplicate across the ~4 Hz text updates; header dividers can't be hovered); hover coexists with an active inspector selection and clears itself on New World. The panel gains `pointer-events: auto` so rows are actually hoverable
@@ -40,7 +38,7 @@ All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 ### Changed
 - Plant display names to English across UI, species modules and docs (Grass/Clover/Cranberry/Reed/Tree) — no Polish tokens remain anywhere in code or documentation
 
-## [0.9.0] - 2026-09-13
+## [0.9.0] - 2026-09-13 07:12
 
 ### Added
 - IndexedDB autosave (Phase 8, the final roadmap phase): the whole sim state is {seed, size, step, agents[], corpses[]} — terrain re-derives from seed+size and the day/night + weather environment is a pure function of seed+step, so nothing else needs storing. Payload = binary header (magic "CRBX" + version u32 + seed/size/step) + JSON tail (`src/save/serialize.ts`, pure TS — runs headlessly); fflate gzip level 6 in a dedicated module worker (`saveWorker.ts`), single IndexedDB key (`storage.ts`). Autosave every 30 s, activity-gated (skipped while paused/settled), plus forced flushes on visibilitychange(hidden) and pagehide(capture); `navigator.storage.persist()` once at boot. Restore-on-load runs BEFORE the first render — a saved world replaces the fresh default one; any failure (no blob, corrupt gzip, version mismatch) falls back to a fresh deterministic world, never crashes. "New World" (dialog button or debug `regenerate`) regenerates AND overwrites the save
@@ -55,7 +53,7 @@ All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 - README "Current state" refreshed to v0.9.0: all roadmap phases 0–8 implemented; feature bullets gained aquatic, day/night + weather and the polish trio (speed slider / autosave / inspector); the stale "not yet implemented" list is now stretch items only (wolf/beaver/moose, NEAT-style evolution behind a pluggable brain interface)
 - `e2e/worldgen.spec.ts` "New World" test now waits for #scene visibility before reading the debug surface — with async boot the canvas is appended at the end of restore-on-load, so that wait IS the readiness gate (the other specs already had it)
 
-## [0.8.0] - 2026-09-13
+## [0.8.0] - 2026-09-13 05:06
 
 ### Added
 - Day/night cycle + weather — the "settings animator" layer (Bibites-inspired): all time-varying sim parameters are sampled per tick from named curves around base values, pure in (world seed, step) with no accumulated state (`src/sim/environment.ts`). One full day = 3600 ticks (~2 min at 1×), night = 1500 ticks (~50 s); light follows a cosine arc over the daylight window (~0 at dawn/dusk, ~1 at noon, exactly 0 through the night) and gates photosynthesis. A "year" spans 3 cycles (15300 ticks, ~8.5 min) and drives a slow seasonal temperature sine (base 15 °C ± 10 °C); weather is a seeded Markov chain over {clear, cloudy, rain} with per-state duration ranges (clear 600–2400, cloudy 450–1800, rain 300–900 ticks) sampled by deterministic hash of (world seed, step at state start) — no Math.random anywhere, reproducible headlessly. Derived multipliers: cold raises animal metabolism (up to ×1.3 hard cap, mild slope so deep winter is a burn increase, not a death spiral), rain boosts plant fertility (×1.35), and breeding is suppressed below 5 °C (the documented cold-snap gate — only deep winter + cool weather dips under it)
@@ -74,7 +72,7 @@ All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 ### Fixed
 - 20k-step stability with the environment enabled across all species (seed 1337, 300×300): frog, fox AND insect went extinct on the initial Phase 7 tuning — frogs starved in deep winter when light-gated regrowth let marsh nectar troughs run deeper than pre-Phase-7 (insects left + berry fallback gone), foxes ran a chronic energy deficit from compressed hunting windows + patrol burn, and insects were stripped to zero by mice switching to insect predation during the deepest meadow plant trough. Fixed via PHOTOSYNTH_COMPENSATION 3.5 (post-mow regrowth timescale), the rest-instead-of-patrol gate, per-species resting-burn cuts and the insect nectar rule above; all core species now hold with margin over the full run (frog min=39/final=90 at cap, fox min=8/final=21, insect min=397/final=600 at cap)
 
-## [0.7.0] - 2026-09-12
+## [0.7.0] - 2026-09-13 01:25
 
 ### Added
 - Aquatic layer — carp (river omnivore) + pike (river predator) live in the river volume: a shared `settlePosition` hook (base.ts) keeps fish over deep-enough underwater cells, clamping back to their last valid position when a move dries out and seating each at its own depth fraction of the water column (`data.depthFrac`). Carp graze shore plants (reed preferred — any plant within reach of the water's edge via `grazePlant`) plus opportunistic waterline insects; pike hunt carp with hunger-gated pursuit + saturating intake and strike frogs at the water's edge (the PLAN frog–pike interaction). Pike foraging is reachability-aware: prey in another connected swim-volume component (behind a land barrier) is never targeted, and directional-foraging steer points are volume-projected (angular search until a candidate sits inside the river) so fish follow channel bends instead of stalling against the clamp
@@ -93,7 +91,7 @@ All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 - Plants no longer drift — positions immutable after seeding: the plant renderer was instancing EVERY agent (animals included) because `PlantRenderer.sync` lacked the kind filter its animal-renderer counterpart has, so each animal also rendered as a generic cone that followed it around — reading as "visibly moving plants". Plant instances are now written once per agent (plus on stage/growth-bucket change) and never move; sim-side plant positions were already provably static (new headless check asserts byte-identical positions after 4000 steps, e2e asserts no animal species ever enters the plant renderer)
 - Deer/tree and all-species world-space scales corrected with per-species size mapping: the raw size trait was used as a geometry scale multiplier on ~1 m base boxes, making deer (size trait 3.5–5.5) up to ~10 m tall while trees were only ~6 m. Each species now declares `bodySize` in world-space meters at its size-trait midpoint and the renderer maps the full trait range onto a fixed ±25% band (`visualScale`, base.ts); tree geometry rebuilt from explicit constants (12 m total, 4 m canopy radius — within the 8–15 m / 3–6 m sanity bands). The size trait's effect on energy capacity is unchanged. New headless check guards deer-max-height < tree-min-total-height and per-species dimension targets
 
-## [0.6.0] - 2026-09-12
+## [0.6.0] - 2026-09-12 14:45
 
 ### Added
 - Predators & scavengers complete the food chain: fox, stork, owl, crow + frog (marsh insectivore with cranberry fallback). Hunger-gated hunting — a predator only enters hunt state below its `hungerThreshold` fraction of capacity — with saturating intake: each kill raises satiation (scaled by how much of the predator's capacity the meal fills), so quick successive kills pay diminishing returns and prey patches can't be stripped
@@ -106,7 +104,7 @@ All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 - Plant edibility is now stage/energy-based: unestablished shoots (non-fruiting below 60% of maxEnergy) are inedible — one bite would drop them under the regrowth floor; replaces an earlier age-based grace period. Seed dispersal gained biome fidelity (a seedling only establishes in the parent's biome — without it, marsh cranberries crept ~40 m into dry meadow over long runs and grew unbounded)
 - Population caps: frog 90 (the marsh food base can't support more), per-species tuning of hunger gates / breeding cooldowns / mating ranges for a stable 20k-step run — all core species hold with margin (mice/hares/hamsters/frogs/crows at cap, foxes ~8–15, owls ~6–10, storks 4–8)
 
-## [0.5.0] - 2026-09-12
+## [0.5.0] - 2026-09-12 11:26
 
 ### Added
 - Herbivores — mouse/hare/hamster/deer + insect pollinators complete the food chain base: per-species energy budgets, grazing behavior with plant regrowth incl. deer tree-browsing (trees recover, not killed by normal browsing), insect pollination boosting plant yield/growth (per-plant cooldown), mice eat insects
@@ -116,7 +114,7 @@ All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 ### Fixed
 - Terrain mesh — restored missing triangle per heightmap cell (the second quad triangle was split along the wrong diagonal, leaving a triangular hole in every land cell); added headless geometry regression check (`scripts/checks/terrain.mjs`)
 
-## [0.4.0] - 2026-09-12
+## [0.4.0] - 2026-09-12 09:04
 
 ### Added
 - Pure-TS sim core — agent schema, deterministic stateless rng (`agentRand` + Gaussian), uniform spatial hash grid (flat counting-sort, no per-cell churn), shared energy model
@@ -127,7 +125,7 @@ All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 - `window.__critterbox` debug surface extended: `agentCount` + `populations { [species]: {count, avgEnergy} }`; speed-multiplier hook left in the accumulator for Phase 8
 - Headless checks (`scripts/checks/plants.mjs`, `spatial.mjs`) — determinism, growth/graze/regrowth cycle, senescence + overgrazing death, population sanity, spatial query vs brute force
 
-## [0.3.0] - 2026-09-12
+## [0.3.0] - 2026-09-12 08:29
 
 ### Added
 - Free-flight camera — WASD move, mouse-drag look (no pointer lock), arrow-key rotation as mouse replacement, Shift ×4 speed, wheel dolly
@@ -135,7 +133,7 @@ All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 - `window.__critterbox` debug surface extended: live `camera {pos,yaw,pitch}` + `paused` / `setPaused(bool)`
 - Playwright e2e camera spec (movement, rotation, dolly, pause, input-focus key guard)
 
-## [0.2.0] - 2026-09-12
+## [0.2.0] - 2026-09-12 08:14
 
 ### Added
 - Heightmap worldgen with seeded fBm noise (4 octaves, absolute feature scale — comparable relief across world sizes)
@@ -147,7 +145,7 @@ All notable changes to Critterbox are documented here. Dates in YYYY-MM-DD.
 - Headless determinism checks (`scripts/checks/worldgen.mjs`) + tsc-CJS compile step in sim-check runner
 - Playwright e2e worldgen spec (debug surface + New World rebuild)
 
-## [0.1.0] - 2026-09-12
+## [0.1.0] - 2026-09-12 07:34
 
 ### Added
 - Project scaffold: Vite + TypeScript strict + Three.js, mirroring Sandfall house conventions

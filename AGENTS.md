@@ -43,7 +43,7 @@ Context is expensive. These rules are hard requirements, not suggestions:
 
 ## CHANGELOG
 
-- Keep-a-Changelog format. Always update CHANGELOG.md for any user-visible change (Added/Changed/Fixed sections, `## [x.y.z] - YYYY-MM-DD` header, bump version in package.json accordingly).
+- Keep-a-Changelog format. Always update CHANGELOG.md for any user-visible change (Added/Changed/Fixed sections, `## [x.y.z] - YYYY-MM-DD HH:MM` header, bump version in package.json accordingly).
 
 ## Plan
 
