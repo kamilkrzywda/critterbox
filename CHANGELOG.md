@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.14.0] - 2026-09-14 15:30
+
+### Added
+- Mobile browser support (v0.14): touch camera on the canvas — one finger flies the camera forward continuously at WASD speed while dragging steers it with the same sensitivity + pitch clamp as the mouse drag (steering and flying happen simultaneously), and two fingers pinch to dolly along the view direction only (same 3 m / 100 px ratio as the wheel). The viewport meta now locks page zoom (`user-scalable=no`) and `touch-action: none` on the canvas so browser gestures can't fight the camera
+- Tap-to-select on touch: tapping an agent selects it + opens the inspector through the existing pointer path (the 5 px travel gate already separates a tap from a camera drag)
+- Pause/play button next to the speed slider in the world panel (all screen sizes): toggles the same pause state as Space, its label flips ⏸/▶ and stays synced with the PAUSED overlay
+- Population rows are touch-highlightable: on a touch device tapping a row toggles that species' highlight ring (same code path as desktop hover); tap it again to clear. Desktop hover is unchanged
+- `agentScreenPos(id)` on the debug surface — projects a live agent's world position into CSS pixel coordinates of the canvas (null when dead/unknown or behind the camera), used by the new mobile e2e
+
+### Changed
+- Responsive HUD reflow below 640 px: title + env panel compact top-left, world panel `min(230px, 52vw)` top-right, population panel `min(208px, 46vw)` bottom-left with a 30 vh scroll cap, and the inspector becomes a full-width bottom sheet (max-height 45 vh) that hides the population panel while open
+- New e2e spec (`e2e/mobile.spec.ts`): 390×844 touch viewport — tap-select at an agent's projected position, one-finger hold flying forward while drag steers (release stops), one-finger drag steer, two-finger pinch dolly
+
 ## [0.13.0] - 2026-09-14 09:20
 
 ### Added

@@ -25,6 +25,7 @@ Theme: Polish fauna (mouse, hare, hamster, deer, frog, stork, owl, fox, crow, ca
 | Camera | Free-flight: WASD move, mouse-drag look, arrows as mouse replacement, Shift fast, wheel dolly |
 | Pause | Space + speed slider at 0× |
 | Inspector | Click any entity (plant/animal) → panel with all its live parameters; selected entity highlighted |
+| Mobile (v0.14) | Touch camera: one finger flies forward at WASD speed while dragging steers (same sensitivity + pitch clamp as mouse drag) / two fingers pinch-dolly only; tap-to-select; `user-scalable=no` + `touch-action:none`; <640 px HUD reflow (inspector = full-width bottom sheet that hides the population panel); pause/play button beside the speed slider |
 | Saves | In-browser autosave (IndexedDB) + "New World" button to regenerate |
 | Perf | No hard limits for now; sim speed slider (0–8×) always available |
 | Location/deploy | `~/projects/sandbox/critterbox` → GitHub Pages at https://kamilkrzywda.github.io/critterbox/, auto-deployed on push to master via `.github/workflows/deploy.yml` |
