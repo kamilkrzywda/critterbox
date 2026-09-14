@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.12.2] - 2026-09-14 07:29
+
+### Changed
+- Algae mats render much smaller (a ~24 cm surface speck instead of a 1 m disc) — the river no longer reads as carpeted with green discs; algae stay clickable in the inspector when zoomed in
+
 ## [0.12.1] - 2026-09-13 22:51
 
 ### Changed

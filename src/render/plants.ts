@@ -110,7 +110,7 @@ function buildVisual(spId: string): { geos: THREE.BufferGeometry[]; colorFns: ((
     case 'cranberry': return { geos: [bushGeo()], colorFns: [(_v, s) => wither(PAL.cranberry, 0.7)(s)] };
     // v0.12: the aquatic plants — algae mats float on the surface, pondweed grows up from the bottom (two
     // offset blades read as a tuft), water lily = pad + bloom (the flower keeps its colour when the pad withers).
-    case 'algae': return { geos: [flatDiscGeo(0.5)], colorFns: [(_v, s) => wither(PAL.algae, 0.6)(s)] };
+    case 'algae': return { geos: [flatDiscGeo(0.12)], colorFns: [(_v, s) => wither(PAL.algae, 0.6)(s)] }; // ~24 cm speck — visible up close, a faint glint from altitude
     case 'pondweed':
       return {
         geos: [coneGeo(0.15, 1.8, 4), coneGeo(0.12, 1.2, 4).translate(0.18, 0, 0.06)],
