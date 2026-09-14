@@ -9,10 +9,17 @@
 import type { Agent } from '../sim/types';
 import { getSpecies } from '../sim/registry';
 
+export interface InspectorPanelOptions {
+  /** Fired when the panel's visibility flips (v0.14 mobile: main.ts hides the population panel behind the
+   *  full-width inspector sheet on narrow screens). Called only on a change, not every ~10 Hz refresh. */
+  onVisible?: (visible: boolean) => void;
+}
+
 /** Wire up the inspector panel inside `container`; returns a disposer for teardown. */
 export function initInspectorPanel(
   container: HTMLElement,
   getAgent: () => Agent | null,
+  options: InspectorPanelOptions = {},
 ): { dispose(): void } {
   const title = document.createElement('div');
   title.className = 'insp-title';
@@ -60,14 +67,17 @@ export function initInspectorPanel(
     for (let i = 0; i < data.length; i++) rows[i].el.textContent = data[i][1]; // live values at ~10 Hz
   }
 
+  let visible = false; // last known visibility — onVisible fires only on a flip, not every ~10 Hz refresh
   function update(): void {
     const a = getAgent();
     if (!a) {
       container.style.display = 'none';
+      if (visible) { visible = false; options.onVisible?.(false); }
       return;
     }
     container.style.display = 'block';
     render(a);
+    if (!visible) { visible = true; options.onVisible?.(true); }
   }
 
   update(); // paint immediately (hidden when nothing is selected yet)
@@ -76,6 +86,7 @@ export function initInspectorPanel(
   return {
     dispose(): void {
       window.clearInterval(timer);
+      if (visible) { visible = false; options.onVisible?.(false); } // a disposed panel can't stay open
       container.innerHTML = '';
     },
   };

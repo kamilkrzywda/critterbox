@@ -78,6 +78,7 @@ export function initPopulationPanel(
   // pair no matter how often the row set is ever rebuilt (no leaks/duplicates across panel updates).
   let over: ((e: MouseEvent) => void) | null = null;
   let out: ((e: MouseEvent) => void) | null = null;
+  let down: ((e: PointerEvent) => void) | null = null; // v0.14 mobile: touch-tap row highlight toggle
   if (options.onHoverSpecies) {
     const onHover = options.onHoverSpecies;
     /** Species id of the row under `el`, or null for headers/dividers/outside. */
@@ -92,6 +93,17 @@ export function initPopulationPanel(
     };
     container.addEventListener('mouseover', over);
     container.addEventListener('mouseout', out);
+    // Touch has no hover: a TAP toggles the highlight through the same onHoverSpecies path (v0.14). Gated on
+    // pointerType so desktop mouseover/mouseout behave exactly as before; tapping the same row again clears.
+    let touchedId: string | null = null;
+    down = (e) => {
+      if (e.pointerType !== 'touch') return;
+      const id = rowId(e.target);
+      if (!id) return; // tapped a divider/blank — leave the highlight alone
+      touchedId = touchedId === id ? null : id;
+      onHover(touchedId);
+    };
+    container.addEventListener('pointerdown', down);
   }
 
   return {
@@ -101,6 +113,7 @@ export function initPopulationPanel(
         container.removeEventListener('mouseover', over);
         container.removeEventListener('mouseout', out);
       }
+      if (down) container.removeEventListener('pointerdown', down);
       options.onHoverSpecies?.(null); // a disposed panel can't keep a species hovered
       container.innerHTML = '';
     },

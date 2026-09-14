@@ -218,6 +218,9 @@ if (subtitle) {
 // the two controls stay in sync: dragging to 0 pauses visually, and Space still toggles its own flag.
 
 const pausedOverlay = document.getElementById('paused-overlay');
+// v0.14 mobile: a pause/play button next to the speed slider (no keyboard on phones). It mirrors the SAME
+// `paused` flag Space toggles, so all three — button label, PAUSED overlay, and the flag — stay in sync.
+const pauseBtn = document.getElementById('pause-btn') as HTMLButtonElement | null;
 let paused = false;
 
 /** The sim is frozen when Space-paused OR the speed slider sits at 0× (see above). */
@@ -227,10 +230,18 @@ function syncPauseOverlay(): void {
   if (pausedOverlay) pausedOverlay.style.display = frozen() ? 'block' : 'none';
 }
 
+/** The button shows ▶ while paused, ⏸ while running — refreshed on every setPaused. */
+function syncPauseButton(): void {
+  if (pauseBtn) pauseBtn.textContent = paused ? '▶' : '⏸';
+}
+
 function setPaused(p: boolean): void {
   paused = p;
   syncPauseOverlay();
+  syncPauseButton();
 }
+
+if (pauseBtn) pauseBtn.addEventListener('click', () => setPaused(!paused));
 
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape') { selectAgentById(null); return; } // Esc closes the inspector / deselects
@@ -407,6 +418,10 @@ const PICK_RADIUS_ANIMAL = 0.8; // m — floored so tiny mice stay pickable
 const pickRaycaster = new THREE.Raycaster();
 const pickNdc = new THREE.Vector2();
 
+// --- screen-projection scratch (v0.14: agentScreenPos for the mobile touch e2e) -------------------
+const projM = new THREE.Matrix4(); // fresh view matrix (world → camera space)
+const projV = new THREE.Vector4(); // world→view→clip; a Vector4 keeps w for perspective division
+
 /** Nearest agent under the given client coords (null over empty space/water). See the note above for why
  *  this is a proximity test against vertical lines instead of an instanced-mesh raycast. */
 function pickAgentAtClient(x: number, y: number): Agent | null {
@@ -484,6 +499,9 @@ if (inspContainer) {
       if (a) return a;
     }
     return selectedId !== null ? s.agentById(selectedId) ?? null : null;
+  }, {
+    // v0.14 mobile: on a narrow screen the full-width inspector sheet hides the population panel (CSS rule).
+    onVisible: (vis) => document.body.classList.toggle('inspector-open', vis),
   });
 }
 
@@ -533,6 +551,9 @@ declare global {
       following: number | null;
       /** World position of a live agent — e2e uses it to verify the follow-camera tracks its target. */
       agentPos(id: number): [number, number, number] | null;
+      /** Projected screen position (CSS px within the canvas) of a live agent — v0.14 mobile touch e2e taps
+       *  agents at their projected pixel. Null when dead/unknown or behind the camera. */
+      agentScreenPos(id: number): [number, number] | null;
       // v0.10: species-hover highlight surface (population-row hover without real mouse events)
       /** Set the hovered population-row species (null/undefined → clear). Drives the ring layer directly. */
       hoverSpecies(id?: string | null): void;
@@ -608,6 +629,22 @@ async function boot(): Promise<void> {
     agentPos(id: number): [number, number, number] | null {
       const a = sim?.agentById(id);
       return a ? [a.pos.x, a.pos.y, a.pos.z] : null;
+    },
+    // v0.14 mobile e2e: project a live agent into CSS pixel coords of the canvas (null when dead/unknown or
+    // behind the camera). Uses a FRESH view matrix (not the last render's) so it is correct even mid-frame.
+    agentScreenPos(id: number): [number, number] | null {
+      const a = sim?.agentById(id);
+      if (!a) return null;
+      camera.updateMatrixWorld();
+      projM.copy(camera.matrixWorld).invert(); // fresh view matrix — front of the camera is z < 0 in it
+      projV.set(a.pos.x, a.pos.y, a.pos.z, 1).applyMatrix4(projM); // world → view space (w stays 1)
+      if (projV.z >= -0.1) return null; // at/behind the camera plane
+      projV.applyMatrix4(camera.projectionMatrix); // view → clip space (now carries a real w)
+      const w = projV.w;
+      if (!Number.isFinite(w) || Math.abs(w) < 1e-6) return null;
+      const ndcX = projV.x / w, ndcY = projV.y / w; // perspective-divide → NDC in [-1,1]
+      const rect = renderer.domElement.getBoundingClientRect();
+      return [(ndcX * 0.5 + 0.5) * rect.width, (-ndcY * 0.5 + 0.5) * rect.height];
     },
     // v0.10: species-hover highlight surface.
     hoverSpecies(id?: string | null): void { setHoveredSpecies(typeof id === 'string' ? id : null); },
