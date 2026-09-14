@@ -19,6 +19,8 @@ Theme: Polish fauna (mouse, hare, hamster, deer, frog, stork, owl, fox, crow, ca
 | Life | Full food chain; every plant and animal an individual agent with stats |
 | Model | Continuous agent-based (no CA); realistic food-chain dynamics |
 | Evolution | Simplified: per-species numeric traits, mutation on birth, sexes exist, offspring inherit from parents |
+| Bird flight (v0.13) | stork/owl/crow fly while foraging/wandering in BURSTS (`canFly` + `airSpeed` ~1.5× ground speed — stork 0.21 / owl 0.22 / crow 0.19 m/tick): up to MAX_FLIGHT_BURST (90) consecutive airborne ticks, then REST_TICKS (60) forced on the ground even while still seeking/wandering; a voluntary landing (arrive+eat) breaks the burst so the next takeoff gets a fresh budget. Always-on 2× flight collapsed insect/frog in the stability run — flap/rest bouts restore it. Duck mostly swims with occasional short flights to far food (>~6 m target, deterministic ~35% per-tick roll; its sparse gate composes with the burst budget but never fills one). Flying costs 1.8× energy/meter (`FLIGHT_COST_MULT`). The sim never changes altitude — pos.y stays at terrain/water level; the render reads `data.flying` for visual height + wing flap |
+| Animal bodies (render, v0.13) | Multi-part instead of single boxes: quadrupeds get 4 small legs + a square head + small square ears (hare gets long ears); birds get two flapping wings + two legs (wings fold along the body when walking/standing); fish get tail fins |
 | Day/night + weather | Affect the sim (light → photosynthesis; temp → metabolism/breeding; rain → plant growth) |
 | Camera | Free-flight: WASD move, mouse-drag look, arrows as mouse replacement, Shift fast, wheel dolly |
 | Pause | Space + speed slider at 0× |

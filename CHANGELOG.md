@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.13.0] - 2026-09-14 09:20
+
+### Added
+- Bird flight in the sim core: **stork**, **owl** and **crow** now fly while foraging/wandering — each gains `canFly` + an `airSpeed` ~1.5× its ground speed (stork 0.21 / owl 0.22 / crow 0.19 m/tick), and a flying bird moves at that air speed while paying 1.8× the normal energy cost per meter (`FLIGHT_COST_MULT`). Flight happens in BURSTS: a bird may stay airborne for at most `MAX_FLIGHT_BURST` (90) consecutive ticks, then is forced on the ground for `REST_TICKS` (60) even while still seeking/wandering — real birds flap in bouts, and always-on 2× flight swept insect/frog patches out of existence in the 20k-step stability run. A voluntary landing (arrive+eat) breaks the burst instead, so the next takeoff gets a fresh full budget. The sim never changes altitude (pos.y stays at terrain/water level); the renderer reads `data.flying` to lift the body and flap the wings
+- Duck flight: ducks mostly swim/walk but take occasional short flights to far food — a deterministic per-tick gate (~35% of ticks) fires only while seeking a meal beyond ~6 m, so they never fly while wandering/idle/eating/mating; their zone clamp is skipped mid-flight so a path over out-of-zone ground isn't snapped back. The duck's sparse gate composes with the burst budget but essentially never fills one (consecutive far-seek rolls are rare), so ducks keep their occasional-short-flight pattern without forced rests
+- New headless check section (`scripts/checks/flight.mjs`): stork/crow/owl are airborne a healthy fraction (>40%) of their seek/wander ticks over 600 ticks on the real world, actually rest (grounded while seeking), and never fly during eat/mate/idle; ducks fly to far food (a minority of their far-foraging ticks, never while eating); and a controlled scenario spanning several burst+rest cycles proves flying costs ~1.8× more energy per meter than walking (metabolism subtracted analytically, grounded meters charged at walking cost); `sim-check.mjs` gained an optional substring filter arg for targeted single-section runs
+
+### Changed
+- Animal bodies now render as multi-part instead of single boxes — quadrupeds get 4 small legs, a square head and small square ears (the hare gets long ears); birds get two flapping wings plus two legs (wings fold along the body when walking/standing); fish get tail fins
+
 ## [0.12.2] - 2026-09-14 07:29
 
 ### Changed

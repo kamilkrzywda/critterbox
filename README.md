@@ -22,7 +22,7 @@ src/
   main.ts            — boot, fixed-timestep loop (accumulator + max-steps clamp), window.__critterbox debug surface
   worldgen/          — noise.ts (seeded value-noise fBm), worldgen.ts (heightmap → biomes)
   sim/               — PURE TS: no three.js imports
-    agents/          — index.ts barrel; plants/ (grass, clover, cranberry, reed, tree); animals/ (base + mouse, hare, hamster, deer, insect, frog, fox, stork, owl, crow, carp, pike)
+    agents/          — index.ts barrel; plants/ (grass, clover, cranberry, reed, tree); animals/ (base + mouse, hare, hamster, deer, insect, frog, fox, stork, owl, crow, carp, pike, roach, trout, duck)
     sim.ts           — Sim core: step loop, breeding, predation/grazing API, save/load state restore
     seedLife.ts      — deterministic per-biome world seeding
     spatial.ts       — uniform spatial hash grid (flat counting-sort)
@@ -30,11 +30,11 @@ src/
     corpses.ts       — corpse layer: decay + scavenging
     environment.ts   — day/night + weather animator curves (pure in seed+step)
     registry.ts, rng.ts, types.ts
-  render/            — Three.js: terrain.ts (heightmap mesh + water), camera.ts (free-flight), plants.ts / animals.ts (InstancedMesh per species)
+  render/            — Three.js: terrain.ts (heightmap mesh + water), camera.ts (free-flight), plants.ts / animals.ts (InstancedMesh per species), animalGeometry.ts (merged multi-part bodies)
   ui/                — panel.ts (world-gen dialog), population.ts (population panel), envPanel.ts (day/weather indicator), inspector.ts (entity inspector side panel)
   save/              — Phase 8: serialize.ts (pure binary payload), storage.ts (IndexedDB, single key), saveWorker.ts (fflate gzip level 6 in a module worker), save.ts (autosave orchestration), restore.ts (restore-on-load)
 scripts/sim-check.mjs   — headless deterministic suite runner (tsc-CJS compile → Node)
-scripts/checks/*.mjs    — check sections: worldgen, terrain, spatial, plants, animals, predators, aquatic, environment, sizes, stability (20k-step run), save (serialize round-trip)
+scripts/checks/*.mjs    — check sections: worldgen, terrain, spatial, plants, animals, predators, aquatic, flight, environment, sizes, stability (20k-step run), save (serialize round-trip)
 e2e/                 — Playwright specs: smoke, worldgen, camera, plants, animals, environment, speed, inspector, save
 playwright.config.ts     — webServer auto-runs build + preview on :4173
 ```
