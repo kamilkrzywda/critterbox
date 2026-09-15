@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.16.0] - 2026-09-15 01:56
+
+### Changed
+- Cursor ground-light raised off the terrain — no more clipping/z-fighting: the point light now sits ~1.2 m above the hit point (a wider, softer pool than the old 0.6 m), and the flat glow disc is replaced by a radial-grid disc that drapes over the terrain (every vertex at `heightAt` + 0.25 m) so it hugs slopes instead of sinking below them
+- Cursor ground-light now only active in darkness: light intensity + glow opacity scale with a night factor derived from the environment light (1 at night, fading to 0 as light reaches ~0.4), so the pool fades out smoothly as dawn approaches — no pop; `cursorLight()` on the debug surface keeps reporting the ground contact point while the pointer is over terrain, and a new `cursorNightFactor()` exposes the fade for e2e
+
 ## [0.15.0] - 2026-09-14 20:24
 
 ### Added
