@@ -19,6 +19,8 @@ import { PlantRenderer } from './render/plants';
 import { AnimalRenderer } from './render/animals';
 import { flightAltFor } from './render/animalGeometry';
 import { HoverHighlight } from './render/hoverHighlight';
+import { Celestial, LIGHT_DISTANCE, makeGlowTexture } from './render/celestial';
+import { DUSK_ELEVATION_SIN, SkyDome } from './render/sky';
 import { initPopulationPanel, type PopRow } from './ui/population';
 import { initEnvPanel } from './ui/envPanel';
 import { initInspectorPanel } from './ui/inspector';
@@ -69,16 +71,40 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.domElement.id = 'scene'; // appended at the END of boot — #scene visible ⇒ world ready (e2e gate)
+// v0.15 "bling": real-time sun shadows (PCFSoft). Coarse pointers (touch devices) get a smaller shadow map —
+// they can't perceive the difference and it halves the fill cost. Detected once at boot.
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// The shadow map is re-rendered only when it can have changed (sun direction or focus point moved — see
+// updateSkyAndLights). Paused/idle frames skip the extra scene pass entirely.
+renderer.shadowMap.autoUpdate = false;
+const COARSE_POINTER = window.matchMedia('(pointer: coarse)').matches;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb); // sky
+scene.background = null; // v0.15: the procedural sky dome (render/sky.ts) replaces the flat colour
+// Fog fades terrain INTO the horizon — its colour is updated per frame with the same palette as the dome.
+const fog = new THREE.Fog(0x87ceeb, 150, 700);
+scene.fog = fog;
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 4000);
 
-// Sun + ambient so the relief reads well (Phase 7 animates these with day/night).
+// Sun + ambient so the relief reads well (Phase 7 animates these with day/night). v0.15: the sun light is
+// repositioned every frame along the celestial arc and casts shadows; a dim bluish moonlight covers night.
 const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-sun.position.set(120, 200, 80);
+sun.position.set(120, 200, 80); // initial pose — updateSkyAndLights moves it each frame from the arc
+sun.castShadow = true;
+sun.shadow.mapSize.setScalar(COARSE_POINTER ? 1024 : 2048);
+sun.shadow.camera.left = -80; sun.shadow.camera.right = 80; // ~160×160 m frustum around the focus point
+sun.shadow.camera.top = 80; sun.shadow.camera.bottom = -80;
+sun.shadow.camera.near = 60; sun.shadow.camera.far = 540; // brackets LIGHT_DISTANCE ± scene extent
+sun.shadow.bias = -0.0004; // kill acne on the low-poly terrain
+sun.shadow.normalBias = 0.4;
+sun.shadow.camera.updateProjectionMatrix();
 scene.add(sun);
+scene.add(sun.target); // target is moved per frame to the focus point (ground under the camera)
+const moonLight = new THREE.DirectionalLight(0x9db8e8, 0); // dim bluish moonlight — NO shadows
+scene.add(moonLight);
+scene.add(moonLight.target);
 const ambient = new THREE.AmbientLight(0xffffff, 0.4);
 scene.add(ambient);
 
@@ -91,14 +117,54 @@ const SKY_NIGHT = new THREE.Color(0x0d1326);
 const SKY_DUSK = new THREE.Color(0xd98e4a); // warm dawn/dusk tint
 const skyScratch = new THREE.Color();
 
-function updateSkyAndLights(): void {
+// v0.15 "bling": sun/moon bodies on the exact day/night arc (render/celestial.ts) + procedural sky dome
+// (render/sky.ts). Both follow the camera, so they're world-size independent and stable at any altitude.
+const celestial = new Celestial(scene);
+// Parented to the camera-following celestial group so the dome stays centred on the camera (a world-origin
+// dome would dip inside BODY_DISTANCE in some directions and swallow the sun disc — see v0.15 fix).
+const skyDome = new SkyDome(celestial.group, SKY_DAY, SKY_DUSK, SKY_NIGHT);
+const lightFocus = new THREE.Vector3(); // ground point under the camera — shadow frustum centre
+let cloudFactor = 0.1; // smoothed weather factor (weather flips discretely — ease toward it, no pops)
+// Shadow-map re-render gate: the extra scene pass runs only when the sun has moved >~1.1° or the focus
+// point >3 m since the last pass — paused/idle frames skip it entirely (see updateSkyAndLights).
+const SHADOW_SUN_DOT_EPS = Math.cos(0.02); // dot threshold ≈ 1.14° of arc
+const lastShadowSunDir = new THREE.Vector3(0, -1, 0); // starts "far away" so the first frame always renders
+const lastShadowFocus = new THREE.Vector3();
+
+function updateSkyAndLights(dt: number): void {
   if (!sim) return;
-  const l = sim.environment.light;
-  sun.intensity = 0.15 + 1.05 * l; // ~0.15 at night, the original 1.2 at noon
+  const env = sim.environment;
+  const l = env.light;
+  // Sun/moon arc + shadow-light placement. The directions mirror environment.ts boundaries exactly: the sun
+  // is above the horizon precisely while light > 0, so no night sun / no dark sky with a high sun.
+  if (world) {
+    lightFocus.set(camera.position.x, world.heightAt(camera.position.x, camera.position.z), camera.position.z);
+  }
+  celestial.update(env.timeOfDay, camera.position, lightFocus, sun);
+  // Re-render the shadow map only when it can have changed (see the gate above).
+  if (celestial.sunDir.dot(lastShadowSunDir) < SHADOW_SUN_DOT_EPS || lightFocus.distanceToSquared(lastShadowFocus) > 9) {
+    renderer.shadowMap.needsUpdate = true; // this frame only — three resets the flag after rendering
+    lastShadowSunDir.copy(celestial.sunDir);
+    lastShadowFocus.copy(lightFocus);
+  }
+  const sunUp = Math.max(0, celestial.sunDir.y); // 1 at zenith → 0 on/below the horizon
+  sun.intensity = (0.15 + 1.05 * l) * sunUp; // zero below the horizon — moonlight takes over the night
+  sun.visible = sunUp > 0.001; // no shadow pass while the sun is under the ground
+  moonLight.intensity = 0.18 * Math.max(0, -celestial.sunDir.y); // dim bluish — peaks at midnight, 0 on the horizon
+  moonLight.position.copy(lightFocus).addScaledVector(celestial.moonDir, LIGHT_DISTANCE);
+  moonLight.target.position.copy(lightFocus);
   ambient.intensity = 0.3 + 0.25 * l;
-  if (l <= 0.4) skyScratch.lerpColors(SKY_NIGHT, SKY_DUSK, l / 0.4);
-  else skyScratch.lerpColors(SKY_DUSK, SKY_DAY, (l - 0.4) / 0.6);
-  scene.background = skyScratch;
+  // Sky palette + fog colour — night→day keyed on SUN ELEVATION (mirrors the dome shader's horizon base
+  // exactly). The old light-level blend lingered in the warm dusk colour for ~700 ticks after sunrise and
+  // rusted the whole morning sky; now it is fully day-blue by ~20° elevation.
+  const dayF = Math.min(1, sunUp / DUSK_ELEVATION_SIN);
+  skyScratch.lerpColors(SKY_NIGHT, SKY_DAY, dayF);
+  fog.color.copy(skyScratch);
+  // Weather smoothing: ease the cloud factor toward the current state's target (~2 s time constant).
+  const cloudTarget = env.weather === 'rain' ? 0.9 : env.weather === 'cloudy' ? 0.65 : 0.1;
+  cloudFactor += (cloudTarget - cloudFactor) * Math.min(1, dt / 2);
+  // Dawn/dusk glow is derived from sunDir.y inside the dome shader — no CPU factor to pass anymore.
+  skyDome.update(celestial.sunDir, celestial.moonDir, l, cloudFactor);
 }
 
 window.addEventListener('resize', () => {
@@ -488,6 +554,79 @@ renderer.domElement.addEventListener('pointermove', (e) => {
 // Leaving the canvas (e.g. onto a HUD panel) clears the preview — otherwise it would go stale.
 renderer.domElement.addEventListener('pointerleave', () => { hoveredAgentId = null; });
 
+// --- cursor ground-light (v0.15 "bling"): a warm pool where the mouse touches the ground -------------------
+// MOUSE ONLY (touch devices never get it) and purely visual — no sim effect. The hit test is analytic: march
+// the pick ray in ~2 m steps against world.heightAt, then binary-search the crossing (~sub-decimeter).
+const cursorLight = new THREE.PointLight(0xffd9a0, 1.5, 18, 2); // warm pool, short reach, physical decay
+cursorLight.visible = false;
+scene.add(cursorLight);
+const cursorGlow = new THREE.Mesh(
+  new THREE.CircleGeometry(4.5, 32),
+  new THREE.MeshBasicMaterial({
+    map: makeGlowTexture(128),
+    color: 0xffd9a0,
+    transparent: true,
+    opacity: 0.35,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  }),
+);
+cursorGlow.rotation.x = -Math.PI / 2; // lie flat on the ground
+cursorGlow.visible = false;
+scene.add(cursorGlow);
+
+let cursorHit: [number, number, number] | null = null; // current pool position (null = hidden) — e2e surface
+
+/** Ground point under a client coord: coarse 2 m march along the ray + binary refinement. Null when the ray
+ *  misses the terrain within ~400 m or points at open sky. */
+function groundPointAtClient(x: number, y: number): [number, number, number] | null {
+  if (!world) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  pickNdc.set(((x - rect.left) / rect.width) * 2 - 1, -((y - rect.top) / rect.height) * 2 + 1);
+  pickRaycaster.setFromCamera(pickNdc, camera);
+  const O = pickRaycaster.ray.origin;
+  const D = pickRaycaster.ray.direction; // normalized by setFromCamera
+  if (D.y >= -0.02) return null; // looking at the sky — no ground ahead
+  const half = world.size / 2 + 2; // a touch past the edge so boundary cells still count
+  for (let t = 2; t <= 400; t += 2) {
+    const px = O.x + D.x * t, py = O.y + D.y * t, pz = O.z + D.z * t;
+    if (Math.abs(px) > half || Math.abs(pz) > half) continue; // outside the world — no terrain there
+    if (py <= world.heightAt(px, pz)) {
+      let lo = t - 2, hi = t;
+      for (let i = 0; i < 16; i++) { // ~sub-decimeter refinement of the crossing
+        const m = (lo + hi) / 2;
+        if (O.y + D.y * m <= world.heightAt(O.x + D.x * m, O.z + D.z * m)) hi = m; else lo = m;
+      }
+      return [O.x + D.x * hi, O.y + D.y * hi, O.z + D.z * hi];
+    }
+  }
+  return null;
+}
+
+function setCursorHit(p: [number, number, number] | null): void {
+  cursorHit = p;
+  if (p) {
+    cursorLight.position.set(p[0], p[1] + 0.6, p[2]); // just above the surface so it lights the ground
+    cursorGlow.position.set(p[0], p[1] + 0.05, p[2]); // hair above the terrain — no z-fighting
+    cursorLight.visible = true;
+    cursorGlow.visible = true;
+  } else {
+    cursorLight.visible = false;
+    cursorGlow.visible = false;
+  }
+}
+
+let lastCursorTime = 0;
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (e.pointerType === 'touch') return; // MOUSE ONLY — touch devices never get the ground pool
+  const now = performance.now();
+  if (now - lastCursorTime < 30) return; // ~33 Hz cap — the march is cheap, no need for 125 Hz
+  lastCursorTime = now;
+  setCursorHit(groundPointAtClient(e.clientX, e.clientY));
+});
+// Leaving the canvas (e.g. onto a HUD panel) hides the pool.
+renderer.domElement.addEventListener('pointerleave', () => { setCursorHit(null); });
+
 // Inspector side panel — HOVERED agent first (a live preview), else the SELECTED one; ~10 Hz (ui/inspector.ts).
 const inspContainer = document.getElementById('inspector-panel');
 if (inspContainer) {
@@ -561,6 +700,11 @@ declare global {
       hoveredSpecies: string | null;
       /** Live instance count of the hover ring layer — e2e asserts it equals the hovered population. */
       hoverInstanceCount: number;
+      // v0.15 "bling": celestial + cursor-light debug surface (e2e/lighting.spec.ts)
+      /** Current world positions of the visible sun/moon spheres on their arc. */
+      celestial(): { sunPos: [number, number, number]; moonPos: [number, number, number] };
+      /** Position of the cursor ground-light pool, or null when hidden (no mouse hit / pointer left). */
+      cursorLight(): [number, number, number] | null;
     };
   }
 }
@@ -646,6 +790,15 @@ async function boot(): Promise<void> {
       const rect = renderer.domElement.getBoundingClientRect();
       return [(ndcX * 0.5 + 0.5) * rect.width, (-ndcY * 0.5 + 0.5) * rect.height];
     },
+    // v0.15 "bling": celestial + cursor-light debug surface (e2e/lighting.spec.ts).
+    celestial(): { sunPos: [number, number, number]; moonPos: [number, number, number] } {
+      const s = new THREE.Vector3();
+      const m = new THREE.Vector3();
+      celestial.sunPos(s);
+      celestial.moonPos(m);
+      return { sunPos: [s.x, s.y, s.z], moonPos: [m.x, m.y, m.z] };
+    },
+    cursorLight(): [number, number, number] | null { return cursorHit; },
     // v0.10: species-hover highlight surface.
     hoverSpecies(id?: string | null): void { setHoveredSpecies(typeof id === 'string' ? id : null); },
     get hoveredSpecies() { return hoveredSpecies; },
@@ -685,7 +838,7 @@ function frame(now: number): void {
   }
   updateSelectionMarker(); // Phase 8: the highlight ring follows the selected agent (cheap per-frame)
   if (sim) hoverLayer.sync(sim.agents); // v0.10: refresh hovered-species rings — a no-op unless hovering
-  updateSkyAndLights(); // Phase 7: sky + sun follow the day/night light curve (cheap per-frame lerps)
+  updateSkyAndLights(dt); // v0.15: sky dome + celestial arc + fog follow the day/night curve (cheap per-frame)
   renderer.render(scene, camera);
 }
 // (the loop starts at the end of boot() — no frame renders before restore-on-load has settled)

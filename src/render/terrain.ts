@@ -85,6 +85,7 @@ export function buildTerrain(world: World): THREE.Group {
     geometry,
     new THREE.MeshLambertMaterial({ vertexColors: true }),
   );
+  terrain.receiveShadow = true; // v0.15 "bling": catches sun shadows (no cast — avoids self-shadow acne)
 
   const water = new THREE.Mesh(
     new THREE.PlaneGeometry(world.size, world.size),

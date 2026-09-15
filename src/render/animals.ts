@@ -175,6 +175,8 @@ export class AnimalRenderer {
     const mesh = new THREE.InstancedMesh(geo, material, capacity);
     mesh.count = 0;
     mesh.frustumCulled = false; // instances span the whole world — never cull by geometry bounds
+    mesh.castShadow = true; // v0.15 "bling": animals cast sun shadows (covers growCapacity too)
+    mesh.receiveShadow = true;
     this.group.add(mesh);
     return mesh;
   }

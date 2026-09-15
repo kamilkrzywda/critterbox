@@ -237,6 +237,8 @@ export class PlantRenderer {
       const mesh = new THREE.InstancedMesh(geo, material, capacity);
       mesh.count = 0;
       mesh.frustumCulled = false; // instances span the whole world — never cull by geometry bounds
+      mesh.castShadow = true; // v0.15 "bling": plants + animals cast sun shadows (Lambert receives fine)
+      mesh.receiveShadow = true;
       this.group.add(mesh);
       return mesh;
     });
@@ -274,6 +276,8 @@ export class PlantRenderer {
       const mesh = new THREE.InstancedMesh(geo, material, newCap);
       mesh.count = 0;
       mesh.frustumCulled = false;
+      mesh.castShadow = true; // v0.15 "bling" — same flags as the initial creation path
+      mesh.receiveShadow = true;
       this.group.add(mesh);
       return mesh;
     });
