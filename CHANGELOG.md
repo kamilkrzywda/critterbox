@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.15.0] - 2026-09-14 20:24
+
+### Added
+- Celestial lighting (v0.15 "bling"): a sun and moon now move across the sky in sync with the sim's day/night cycle — the sun rises at dawn, crosses zenith at midday, sets at dusk, and its elevation stays above the horizon exactly while the environment light is > 0 (the arc mirrors `environment.ts` boundaries directly); the moon is antipodal to the sun so one of them is always up. The sun casts real-time shadows (PCFSoft) with a shadow frustum that follows the ground point under the camera; a dim bluish moonlight covers the night
+- Procedural sky: the flat background colour is replaced by a shader dome — zenith→horizon gradient on the same day/dusk/night palette, a warm glow band around the sun at low elevation (dawn/dusk), hash-based stars fading in at night, and gray desaturation that eases toward the current weather (no pops when it flips). Matching distance fog fades terrain into the horizon colour
+- Cursor ground-light: where the mouse touches the ground a warm light pool appears (a short-reach point light + a soft additive glow disc) — MOUSE ONLY, touch devices never get it; it hides when the pointer leaves the canvas or points at open sky
+
+### Changed
+- New e2e spec (`e2e/lighting.spec.ts`): sun/moon positions finite at boot and the sun travels with the sim clock at 8× speed; the cursor ground-light tracks the mouse on the terrain (pool height matches `heightAt` at its own xz) and hides off-canvas; a touch tap never creates it
+
+### Fixed
+- Morning sky no longer renders rusty orange after sunrise: every dawn/dusk transition in the dome shader (base palette, warm glow band, star fade-out) is now keyed on the sun's actual ELEVATION instead of the sim light level — light lingers below 0.4 for ~700 ticks while the sun climbs to ~57°, which kept the whole dome in dusk tint through mid-morning. The sky is fully day-blue by ~20° elevation, and the warm glow stays localised around the sun's azimuth (plus a faint uniform cast) instead of rusting the entire dome
+- Sun/moon spheres no longer fog out: their materials and the glow sprite are now `fog:false` — they sit at 700 m, exactly at the scene fog far plane, so default fogging erased them in daytime screenshots
+- Sky dome follows the camera instead of sitting pinned at world origin: from the boot pose (~254 m off-centre) the fixed dome's surface dipped inside the sun sphere's 700 m distance in some directions and swallowed the disc whenever the sun was above ~20° elevation. The dome is now parented to the camera-following celestial group, so it stays a constant 800 m around the camera
+- Sky dome shader applies the renderer's output colour-space conversion (`#include <colorspace_fragment>`): ShaderMaterial doesn't get it automatically (built-in materials do), so the dome displayed its linear working-space values as-is and read ~40% darker than the palette — with a visible seam against the fog, which encodes correctly
+- Night scene reads less flat: moonlight intensity nudged 0.12 → 0.18
+
 ## [0.14.0] - 2026-09-14 15:30
 
 ### Added
