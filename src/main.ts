@@ -554,28 +554,80 @@ renderer.domElement.addEventListener('pointermove', (e) => {
 // Leaving the canvas (e.g. onto a HUD panel) clears the preview — otherwise it would go stale.
 renderer.domElement.addEventListener('pointerleave', () => { hoveredAgentId = null; });
 
-// --- cursor ground-light (v0.15 "bling"): a warm pool where the mouse touches the ground -------------------
-// MOUSE ONLY (touch devices never get it) and purely visual — no sim effect. The hit test is analytic: march
-// the pick ray in ~2 m steps against world.heightAt, then binary-search the crossing (~sub-decimeter).
-const cursorLight = new THREE.PointLight(0xffd9a0, 1.5, 18, 2); // warm pool, short reach, physical decay
+// --- cursor ground-light (v0.15 "bling", v0.16): a warm pool where the mouse touches the ground --------------
+// MOUSE ONLY (touch devices never get it) and purely visual — no sim effect, NIGHT-ONLY: intensity + glow scale
+// with darkness so the pool fades out smoothly as dawn approaches instead of popping off. The hit test is
+// analytic: march the pick ray in ~2 m steps against world.heightAt, then binary-search the crossing (~sub-decimeter).
+const CURSOR_LIGHT_BASE = 1.5; // PointLight intensity at full darkness (scaled by the night factor per frame)
+const CURSOR_LIGHT_HEIGHT = 1.2; // m above the hit point — a wider, softer pool than the old 0.6 m
+const GLOW_LIFT = 0.25; // glow disc floats this far above terrain everywhere → no z-fighting / slope clipping
+const GLOW_OPACITY = 0.35; // additive glow at full darkness (scaled by the night factor per frame)
+const NIGHT_FADE_LIGHT = 0.4; // night factor reaches 0 when env light hits this (~early morning, well before full day)
+
+const cursorLight = new THREE.PointLight(0xffd9a0, CURSOR_LIGHT_BASE, 18, 2); // warm pool, short reach, physical decay
 cursorLight.visible = false;
 scene.add(cursorLight);
+// Glow: a radial-grid disc that DRAPES over the terrain (every vertex sits at heightAt + GLOW_LIFT) — a flat disc
+// clips into slopes and z-fights on flat ground. Unlit additive → reads as light pooling, not geometry.
+const GLOW_RADIUS = 4.5;
+const GLOW_SEGMENTS = 48;
+const GLOW_RINGS = [0.9, 1.8, 2.7, 3.6, 4.5]; // concentric rings out to the radius (center vertex is separate)
+const glowVertCount = 1 + GLOW_RINGS.length * GLOW_SEGMENTS;
+const glowOffsets = new Float32Array(glowVertCount * 2); // local xz offsets from the pool centre, per vertex
+glowOffsets[0] = 0;
+glowOffsets[1] = 0; // center
+{
+  let i = 2;
+  for (const r of GLOW_RINGS) {
+    for (let j = 0; j < GLOW_SEGMENTS; j++) {
+      const a = (j / GLOW_SEGMENTS) * Math.PI * 2;
+      glowOffsets[i++] = r * Math.cos(a);
+      glowOffsets[i++] = r * Math.sin(a);
+    }
+  }
+}
+const glowGeo = new THREE.BufferGeometry();
+const glowPosAttr = new THREE.BufferAttribute(new Float32Array(glowVertCount * 3), 3); // filled by drapeGlow per hit
+glowGeo.setAttribute('position', glowPosAttr);
+{
+  const uv = new Float32Array(glowVertCount * 2);
+  for (let i = 0; i < glowVertCount; i++) {
+    uv[i * 2] = glowOffsets[i * 2] / GLOW_RADIUS + 0.5; // planar UV — the radial glow texture maps straight on
+    uv[i * 2 + 1] = glowOffsets[i * 2 + 1] / GLOW_RADIUS + 0.5;
+  }
+  glowGeo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  const idx: number[] = [];
+  for (let ring = 0; ring < GLOW_RINGS.length; ring++) {
+    const outer = 1 + ring * GLOW_SEGMENTS; // this ring's first vertex
+    if (ring === 0) {
+      for (let j = 0; j < GLOW_SEGMENTS; j++) idx.push(0, outer + j, outer + ((j + 1) % GLOW_SEGMENTS)); // center fan — CCW from above → +y normal
+    } else {
+      const inner = outer - GLOW_SEGMENTS; // previous ring's first vertex
+      for (let j = 0; j < GLOW_SEGMENTS; j++) {
+        const k = (j + 1) % GLOW_SEGMENTS;
+        idx.push(inner + j, outer + j, inner + k);
+        idx.push(inner + k, outer + j, outer + k);
+      }
+    }
+  }
+  glowGeo.setIndex(idx);
+}
 const cursorGlow = new THREE.Mesh(
-  new THREE.CircleGeometry(4.5, 32),
+  glowGeo,
   new THREE.MeshBasicMaterial({
     map: makeGlowTexture(128),
     color: 0xffd9a0,
     transparent: true,
-    opacity: 0.35,
+    opacity: GLOW_OPACITY,
     blending: THREE.AdditiveBlending,
-    depthWrite: false,
+    depthWrite: false, // never write depth — the pool is a light effect, not geometry
   }),
 );
-cursorGlow.rotation.x = -Math.PI / 2; // lie flat on the ground
 cursorGlow.visible = false;
 scene.add(cursorGlow);
 
-let cursorHit: [number, number, number] | null = null; // current pool position (null = hidden) — e2e surface
+let cursorHit: [number, number, number] | null = null; // current pool position (null = no hit) — e2e surface
+let cursorNightFactor = 1; // darkness factor from the last frame (1 at night → 0 by early morning) — e2e surface
 
 /** Ground point under a client coord: coarse 2 m march along the ray + binary refinement. Null when the ray
  *  misses the terrain within ~400 m or points at open sky. */
@@ -603,17 +655,40 @@ function groundPointAtClient(x: number, y: number): [number, number, number] | n
   return null;
 }
 
+/** Lay the glow disc over the terrain around (cx, cz): every vertex at heightAt + GLOW_LIFT, so it hugs slopes
+ *  instead of clipping through them. */
+function drapeGlow(cx: number, cz: number): void {
+  const w = world; // non-null in practice — only called with a live hit from groundPointAtClient
+  if (!w) return;
+  for (let i = 0; i < glowVertCount; i++) {
+    const x = cx + glowOffsets[i * 2];
+    const z = cz + glowOffsets[i * 2 + 1];
+    glowPosAttr.setXYZ(i, x, w.heightAt(x, z) + GLOW_LIFT, z);
+  }
+  glowPosAttr.needsUpdate = true;
+}
+
 function setCursorHit(p: [number, number, number] | null): void {
-  cursorHit = p;
-  if (p) {
-    cursorLight.position.set(p[0], p[1] + 0.6, p[2]); // just above the surface so it lights the ground
-    cursorGlow.position.set(p[0], p[1] + 0.05, p[2]); // hair above the terrain — no z-fighting
-    cursorLight.visible = true;
-    cursorGlow.visible = true;
-  } else {
+  cursorHit = p; // visibility + intensity are per-frame (updateCursorLight) — this only tracks the hit point
+  if (!p || !world) return;
+  drapeGlow(p[0], p[2]);
+}
+
+/** Per frame: scale the pool by darkness (1 at night → 0 as light reaches NIGHT_FADE_LIGHT) and show it only while
+ *  the pointer is over ground AND it's dark enough to see — a smooth dawn/dusk fade, no pop. */
+function updateCursorLight(): void {
+  const l = sim ? sim.environment.light : 1; // no sim yet → treat as day (hidden)
+  cursorNightFactor = Math.min(1, Math.max(0, 1 - l / NIGHT_FADE_LIGHT));
+  if (!cursorHit || cursorNightFactor <= 0.01) {
     cursorLight.visible = false;
     cursorGlow.visible = false;
+    return;
   }
+  cursorLight.position.set(cursorHit[0], cursorHit[1] + CURSOR_LIGHT_HEIGHT, cursorHit[2]); // just above the surface so it lights the ground
+  cursorLight.intensity = CURSOR_LIGHT_BASE * cursorNightFactor;
+  (cursorGlow.material as THREE.MeshBasicMaterial).opacity = GLOW_OPACITY * cursorNightFactor;
+  cursorLight.visible = true;
+  cursorGlow.visible = true;
 }
 
 let lastCursorTime = 0;
@@ -680,6 +755,9 @@ declare global {
       /** Current sim-speed multiplier (0–8×); the slider and this stay in sync. */
       speed: number;
       setSpeed(x: number): void;
+      /** Test-only (v0.16): advance the sim synchronously by n ticks — headless frames run far slower than 8×, so
+       *  time-based e2e can't wait for a day/night transition; this jumps the clock deterministically instead. */
+      advanceTicks(n: number): void;
       /** Select an agent for the inspector by id (null/undefined → deselect). Dead ids deselect. */
       selectAgent(id?: number | null): void;
       /** Currently selected agent id, or null when nothing is selected. */
@@ -703,8 +781,11 @@ declare global {
       // v0.15 "bling": celestial + cursor-light debug surface (e2e/lighting.spec.ts)
       /** Current world positions of the visible sun/moon spheres on their arc. */
       celestial(): { sunPos: [number, number, number]; moonPos: [number, number, number] };
-      /** Position of the cursor ground-light pool, or null when hidden (no mouse hit / pointer left). */
+      /** Ground contact point of the cursor light pool, or null when there is no mouse hit / pointer left.
+       *  Reported regardless of time of day — only visibility/intensity are night-gated (v0.16). */
       cursorLight(): [number, number, number] | null;
+      /** Darkness factor scaling the pool: 1 at night → 0 once env light reaches ~0.4 (v0.16 night-only fade). */
+      cursorNightFactor(): number;
     };
   }
 }
@@ -766,6 +847,10 @@ async function boot(): Promise<void> {
     // Phase 8: sim speed + entity inspector surface.
     get speed() { return simSpeed; },
     setSpeed(x: number): void { setSimSpeed(typeof x === 'number' && Number.isFinite(x) ? x : 1); },
+    advanceTicks(n: number): void { // test-only — synchronous, so no frame can interleave mid-jump
+      const steps = Math.max(0, Math.floor(typeof n === 'number' && Number.isFinite(n) ? n : 0));
+      for (let i = 0; i < steps; i++) stepSim();
+    },
     selectAgent(id?: number | null): void { selectAgentById(id ?? null); },
     get selected() { return selectedId; },
     get hoveredAgent() { return hoveredAgentId; },
@@ -799,6 +884,7 @@ async function boot(): Promise<void> {
       return { sunPos: [s.x, s.y, s.z], moonPos: [m.x, m.y, m.z] };
     },
     cursorLight(): [number, number, number] | null { return cursorHit; },
+    cursorNightFactor(): number { return cursorNightFactor; },
     // v0.10: species-hover highlight surface.
     hoverSpecies(id?: string | null): void { setHoveredSpecies(typeof id === 'string' ? id : null); },
     get hoveredSpecies() { return hoveredSpecies; },
@@ -839,6 +925,7 @@ function frame(now: number): void {
   updateSelectionMarker(); // Phase 8: the highlight ring follows the selected agent (cheap per-frame)
   if (sim) hoverLayer.sync(sim.agents); // v0.10: refresh hovered-species rings — a no-op unless hovering
   updateSkyAndLights(dt); // v0.15: sky dome + celestial arc + fog follow the day/night curve (cheap per-frame)
+  updateCursorLight(); // v0.16: cursor pool fades with darkness — per frame, since light changes even with a still mouse
   renderer.render(scene, camera);
 }
 // (the loop starts at the end of boot() — no frame renders before restore-on-load has settled)
